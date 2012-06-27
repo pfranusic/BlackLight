@@ -1,0 +1,8 @@
+BlackLight/Huge/README
+
+This is a set of functions for huge integer arithmetic.
+
+A huge integer is defined as an integer whose log base 2 is greater than 64.
+Huge integer arithmetic is required by the Rivest-Shamir-Adleman algorithm (RSA).
+The source files in BlackLight/Huge are written in ANSI C.
+

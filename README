@@ -1,0 +1,16 @@
+BlackLight/README
+
+BlackLight is an open-source library for autonomic radios.
+
+An autonomic radio is a wireless transceiver with complete and exclusive control
+over which signals it transmits and which signals it receives.
+This is in contrast to insecure radios such as smartphones,
+which are subject to control by external entities.
+
+The library contains design files under an open-source license.
+The design files are the property of the BlackLight Trust.
+The design files can be used to fabricate autonomic radios.
+
+"Black" comes from the secure communications industry and connotes a protected signal.
+"Light" signifies wideband electromagnetic radiation.
+

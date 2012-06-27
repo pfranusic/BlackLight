@@ -1,0 +1,8 @@
+BlackLight/OpenPGP/README
+
+This is the BlackLight implementation of OpenPGP.
+
+The OpenPGP standard is specified in RFC 4880.
+OpenPGP defines a protocol for the transmission of encrypted messages.
+The source files in BlackLight/OpenPGP are written in Common Lisp.
+
