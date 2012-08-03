@@ -1,0 +1,270 @@
+<!-- BlackLight/OpenPGP/Docs/startup-guide.html  -->
+<!-- Copyright 2012 Peter Franusic               -->
+<html>
+<head>
+<title> BlackLight OpenPGP Startup Guide </title>
+</head>
+<body bgcolor="#000000" text="#00FF00">
+<h1> BlackLight OpenPGP <br> Startup Guide </h1>
+
+
+This page describes how to start up the BlackLight OpenPGP subsystem.
+<p>
+In these examples we use Clozure Common Lisp (CCL), formerly known as OpenMCL.
+It's best to use CCL in an Emacs shell, although it's not absolutely necessary.
+We'll assume that you have a Unix system with CCL installed,
+and that you are able to open two terminal windows simultaneously.
+<p>
+The CCL REPL prompt is a question mark (<tt> ? </tt>).<br>
+The Unix shell prompt is a dollar sign (<tt> $ </tt>).
+
+
+<h2> Boot the system </h2>
+
+Open the first terminal window.
+Change to the Code directory and start CCL.
+<blockquote><pre>
+$ cd ~/BlackLight/OpenPGP/Code/
+$ /Applications/OpenMCL/dppccl
+? 
+</pre></blockquote>
+
+The next step is to load a "bootstrap" module, which loads everything else.
+The name of the bootstrap module is system-boot.
+It is first compiled, then loaded, and then run.
+It compiles and loads all the other modules.
+A few modules take a while to compile, e.g. prime.
+When system-boot finishes, it prints DONE.
+<blockquote><pre>
+? (compile-file "system-boot")
+? (load "system-boot")
+? (system-boot)
+</pre></blockquote>
+
+Now we test each module.
+This gives us a certain amount of assurance that each module is okay.
+A few modules take a while to complete their test, e.g. keys and comm.
+When a module passes its test, an "okay" is printed.
+<blockquote><pre>
+? (system-test)
+</pre></blockquote>
+
+After system-test, the keyring is always empty.
+So we <i><u>always</u></i> need to load the keyring with some keys.
+Since we're going to do the exercises below,
+we'll load some prefabricated keys from the Test directory.
+All we need to specify here is the path.
+<blockquote><pre>
+? (load-keyring "../Test")
+</pre></blockquote>
+
+
+<h2> Zeta and Zane </h2>
+
+We introduce two hypothetical users, Zeta and Zane.
+We're going to simulate an exchange of messages between them.
+First Zane will transmit a short text message to Zeta.
+Then Zeta will transmit a file to Zane.
+<p>
+We wanted to make this Startup Guide easy to follow.
+Therefore we've prefabricated keys for Zeta and Zane.
+This lets us avoid most of the fuss with keys and keyrings, at least temporarily.
+We'll put off key operations until later.
+<p>
+First, Zane transmits a short text message to Zeta.
+We assume that Zane has successfully booted his system,
+has successfully run system-test, and has the "<tt>?</tt>" prompt
+in the first terminal window.
+Zane assembles a short message into the transmit form tx-form, 
+encodes it with encode-comm, and writes the result into the file zzzz.pgp.
+<blockquote><pre>
+? (setf tx-mssg "Please send me RFC 1991.")
+? (setf tx-form (list 'COMM 
+    (date) "Zeta" "Zane" "..." (split-str tx-mssg)))
+? (setf tx-code (encode-comm tx-form))
+? (putfile "../Test/zzzz.pgp" tx-code)
+</pre></blockquote>
+
+
+Zeta now receives the text message sent by Zane.
+To simplify this demonstration, Zeta uses the same terminal window as Zane.
+She gets the encoded data from zzzz.pgp, decodes it with decode-comm,
+reads the message, and finally deletes the file zzzz.pgp
+so it doesn't clutter up the Test directory.
+<blockquote><pre>
+? (setf rx-code (getfile "../Test/zzzz.pgp"))
+? (setf rx-form (decode-comm rx-code))
+? (setf rx-mssg (unite-str (nth 5 rx-form)))
+? (delete-file "../Test/zzzz.pgp")
+</pre></blockquote>
+
+Next, Zeta transmits a file to Zane.
+She specifies the name of the transmit file and the path.
+She then reads the file data and creates a communique form.
+Finally she encodes the communique and writes the file to zzzz.pgp.
+<blockquote><pre>
+? (setf tx-file "rfc1991.txt")
+? (setf tx-path (format nil "../Docs/~A" tx-file))
+? (length (setf tx-data (getfile tx-path)))
+? (length (setf tx-form (list 'COMM 
+    (date) "Zeta" "Zane" tx-file tx-data)))
+? (length (setf tx-code (encode-comm tx-form)))
+? (putfile "../Test/zzzz.pgp" tx-code)
+</pre></blockquote>
+
+
+Zane receives the file sent by Zeta.
+He reads the zzzz.pgp file and decodes the communique.
+Then he takes the decoded data and writes it to a file in Test.
+Finally he deletes zzzz.pgp.
+<blockquote><pre>
+? (length (setf rx-code (getfile "../Test/zzzz.pgp")))
+? (length (setf rx-form (decode-comm rx-code)))
+? (length (setf rx-data (nth 5 rx-form)))
+? (setf rx-file (nth 4 rx-form))
+? (setf rx-path (format nil "../Test/~A" rx-file))
+? (putfile rx-path rx-data)
+? (delete-file "../Test/zzzz.pgp")
+</pre></blockquote>
+
+Zane uses the second terminal window and changes to the Test directory.
+Then he uses the diff command to verify that the received file 
+is identical to the transmitted file.
+He then deletes the received file from the Test directory.
+<blockquote><pre>
+$ cd ~/BlackLight/OpenPGP/Test
+$ diff rfc1991.txt ../Docs/rfc1991.txt
+$ rm rfc1991.txt
+</pre></blockquote>
+
+
+<h2> Genny and Blake </h2>
+
+We introduce two additional hypothetical users, Genny and Blake.
+We want to demonstrate that BlackLight OpenPGP (UV) complies with 
+the OpenPGP standard specified in RFC-4880.
+We'll use an alternate OpenPGP implementation, namely GNU Privacy Guard (GPG).
+So Blake uses UV and Genny uses GPG.
+<p>
+To begin, Blake transmits a large file to Genny.
+He uses the first terminal window, the one running CCL.
+He specifies the name of the file and the path of the source.
+He gets the file date and creates a communique form.
+Then he encodes the communique and writes the result 
+into the file zzzz.pgp.
+<blockquote><pre>
+? (setf tx-file "rfc1991.txt")
+? (setf tx-path (format nil "../Docs/~A" tx-file))
+? (length (setf tx-data (getfile tx-path)))
+? (length (setf tx-form (list 'COMM 
+    (date) "Blake" "Genny" tx-file tx-data)))
+? (length (setf tx-code (encode-comm tx-form)))
+? (putfile "../Test/zzzz.pgp" tx-code)
+</pre></blockquote>
+
+Genny receives the file sent by Blake.
+In the second terminal window, she uses a gpg command to decode zzzz.pgp
+and write the result into rfc1991.txt in the Test directory.
+She then uses the diff command to verify that the file she received
+is exactly the same as the original file.
+Finally, she deletes rfc1991.txt and zzzz.pgp.
+<blockquote><pre>
+$ cd ~/BlackLight/OpenPGP/Test/
+$ gpg -o rfc1991.txt --options gpg.conf -d zzzz.pgp
+$ diff rfc1991.txt ../Docs/rfc1991.txt
+$ rm rfc1991.txt
+$ rm zzzz.pgp
+</pre></blockquote>
+
+Now it's Genny's turn to transmit a large file to Blake.
+She uses a gpg command to sign and encrypt rfc2440.txt
+and write the result into zzzz.pgp.
+<blockquote><pre>
+$ gpg -o zzzz.pgp --options gpg.conf -se -r Blake ../Docs/rfc2440.txt
+</pre></blockquote>
+
+
+Blake receives the file sent by Genny.
+He gets the file data from zzzz.pgp and decodes it into a communique form.
+Then he writes the decoded data into the rfc2440.txt file in the Test directory.
+<blockquote><pre>
+? (length (setf rx-code (getfile "../Test/zzzz.pgp")))
+? (length (setf rx-form (decode-comm rx-code)))
+? (length (setf rx-data (nth 5 rx-form)))
+? (setf rx-file (nth 4 rx-form))
+? (setf rx-path (format nil "../Test/~A" rx-file))
+? (putfile rx-path rx-data)
+</pre></blockquote>
+
+Blake switches to the second terminal window.
+He uses the diff command to verify that the file he received
+is exactly the same as the original file.
+Finally, he deletes rfc2440.txt and zzzz.pgp.
+<blockquote><pre>
+$ cd ~/BlackLight/OpenPGP/Test/
+$ diff rfc2440.txt ../Docs/rfc2440.txt
+$ rm rfc2440.txt
+$ rm zzzz.pgp
+</pre></blockquote>
+
+
+<h2> Key operations </h2>
+
+We've postponed dealing with keys.
+Now it's time to learn several key operations.
+First, we'll create a local keyfile for someone, say Tom.
+We need to decide the name of the keyfile (Tom.loc),
+the directory to put it in (Test),
+and the approximate size of the keys (1023.95 bits).
+<blockquote><pre>
+? (create-local-keyfile "../Test" "Tom" 1023.95)
+</pre></blockquote>
+
+
+Next, we'll export Tom's keys.
+We'll take the keyfile we just created (Tom.loc)
+and create a PGP certificate (Tom.pgp).
+<blockquote><pre>
+? (cert-export "../Test/Tom.loc" "../Test/Tom.pgp")
+</pre></blockquote>
+
+
+Finally, we'll import Tom's keys.
+We'll take the certificate we just created (Tom.pgp)
+and create a remote keyfile (Tom.rem).
+<blockquote><pre>
+? (cert-import "../Test/Tom.pgp" "../Test/Tom.rem")
+</pre></blockquote>
+
+Since this was just an exercise, we delete the three keys
+so they don't clutter up the Test directory.
+<blockquote><pre>
+? (delete-file "../Test/Tom.loc")
+? (delete-file "../Test/Tom.pgp")
+? (delete-file "../Test/Tom.rem")
+</pre></blockquote>
+
+In normal practice, we would move the local keyfile (Tom.loc) 
+to a directory, say My-Keys, with all of our other keys.
+We would also need to add "Tom.loc" to a <tt>LOAD-THESE</tt> file in My-Keys.
+<tt>LOAD-THESE</tt> is a list of keyfiles and is read by the load-keyring function.
+(See the Test directory for an example of the <tt>LOAD-THESE</tt> file).
+And to use our keys, we would need to load them.
+<blockquote><pre>
+? (load-keyring "Keys")
+</pre></blockquote>
+
+
+
+<h2> Summary </h2>
+
+This Startup Guide has shown 
+how to send and receive messages within BlackLight (Zeta and Zane),
+how to send and receive messages between BlackLight and Gnu Privacy Guard (Genny and Blake),
+and how create, export, and import keys (Key operations).
+
+
+<p>
+<br>
+</body>
+</html>

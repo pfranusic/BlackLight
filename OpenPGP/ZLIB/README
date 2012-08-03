@@ -1,0 +1,35 @@
+BlackLight/OpenPGP/ZLIB/README
+Copyright 2012 Peter Franusic
+
+BlackLight OpenPGP uses the ZLIB compression algorithm.
+The source file "zlib.lisp" specifies zlib-deflate and zlib-inflate.
+The source file "uv-zlib.c" specifies _uv_deflate and _uv_inflate.
+zlib-deflate calls _uv_deflate and zlib-inflate calls _uv_inflate.
+Both _uv_deflate and _uv_inflate are provided in "libz.dylib"
+via the Clozure Common Lisp Foreign Function Inteface (CCL FFI).
+libz.dylib is a customized zlib version 1.2.5 shared library.
+
+Here's how libz.dylib was built:
+The zlib-1.2.5 distribution was download and installed.
+A link to "uv-zlib.c" was created in the zlib-1.2.5 directory.
+Two zlib-1.2.5 source files were modified: "Makefile" and "zconf.h.cmakein".
+
+To generate a new libz.dylib shared library:
+
+  - Download an install zlib-1.2.5
+  - Create link to uv-zlib.c
+  - Replace Makefile
+  - Replace zconf.h.cmakein
+  - Type "make install"
+
+To open the shared library in BlackLight:
+
+  ? (open-shared-library "ZLIB/libz.dylib")
+
+The shared library will have the two symbols "_uv_deflate" and "_uv_inflate".
+Use the CCL-FFI "external" operator to verify this.
+
+  ? (external "_uv_deflate")
+  ? (external "_uv_inflate")
+
+

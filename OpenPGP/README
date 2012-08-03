@@ -1,8 +1,50 @@
 BlackLight/OpenPGP/README
 
-This is the BlackLight implementation of OpenPGP.
-
-The OpenPGP standard is specified in RFC 4880.
+This is the BlackLight implementation of the OpenPGP standard.
 OpenPGP defines a protocol for the transmission of encrypted messages.
-The source files in BlackLight/OpenPGP are written in Common Lisp.
+The OpenPGP standard is specified in RFC 4880.
+
+BlackLight OpenPGP source files are written mostly in Common Lisp (CL).
+The CL sources are located in ~/BlackLight/OpenPGP/Code.
+
+BlackLight OpenPGP provides ZLIB compression using a shared library.
+The ZLIB sources are located in ~/BlackLight/OpenPGP/ZLIB.
+
+BlackLight OpenPGP is validated with a suite of tests.
+The test files are located in ~/BlackLight/OpenPGP/Test.
+
+BlackLight OpenPGP is well-documented.
+Documentation is located in ~/BlackLight/OpenPGP/Docs.
+The main documentation page is ~/BlackLight/OpenPGP/Docs/index.html.
+The documentation includes the Startup Guide.
+
+BlackLight OpenPGP is designed to run inside a cryptographic module.
+It is **not** meant to run on top of an insecure operating system.
+See FIPS PUB 140-2 "Security Requirements for Cryptographic Modules"
+for more information on this constraint.
+
+BlackLight OpenPGP is cryptographic software.
+Many nations regard cryptographic software as a munition.
+Various jurisdictions apply various laws that prohibit the creation,
+publication, export, import, and use of cryptographic software.
+
+BlackLight OpenPGP is currently the property of Peter Franusic.
+Sometime within the next year, the property will be endowed to 
+a Trust under the trusteeship of a non-profit corporation.
+For more information, send email to pete@sargo.com.
+
+The current version of BlackLight OpenPGP is slow.
+In particular, the modular exponentiation function (modex)
+is currently implemented with a simple square and multiply algorithm.
+And modex is used in RSA key generation, encryption, and decryption,
+so these operations currently run very slowly.
+Future versions of modex will be implemented in hardware
+and will employ "speed-ups" such as Montgomery reduction.
+
+The current version of BlackLight OpenPGP is also fragile.
+This is because the error function halts processing and issues a message,
+which is what we want in the early stages of software development.
+Future versions of the error function will be implemented differently,
+so as to keep the system running smoothly while still flagging problems.
+
 

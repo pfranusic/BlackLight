@@ -1,0 +1,25 @@
+## BlackLight/OpenPGP/Test/Genny.keydef
+## Copyright 2012 Peter Franusic
+##
+## This is Genny's GnuPG key definition file.
+## It's used to automatically generate keys.
+## pub and sub are copied into the Genny.pubring file.
+## sec and ssb are copied into the Genny.secring file.
+## Ref: "Unattended key generation" in gnupg-1.4.9/doc/DETAILS.
+##
+%echo Generating pub sec sub sbb
+Key-Type: RSA
+Key-Length: 1024
+Key-Usage: sign
+Subkey-Type: RSA
+Subkey-Length: 1024
+Subkey-Usage: encrypt
+Name-Real: Genny
+Name-Comment: GPG
+Name-Email: genny@example.org
+Expire-Date: 0
+Passphrase: gentian
+%pubring Genny.pubring
+%secring Genny.secring
+%commit
+%echo Done

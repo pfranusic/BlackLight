@@ -1,0 +1,29 @@
+BlackLight/OpenPGP/Tests/README
+Copyright 2012 Peter Franusic
+
+The Test directory contains files that are used 
+to test the BlackLight OpenPGP (UV) software.
+Some of the tests require interoperation with
+the GNU Privacy Guard (GPG).
+
+File			Usage
+----------------	--------------
+LOAD-THESE		UV keyring
+Zeta.loc		UV keyring
+Zeta.rem		UV keyring
+Zane.loc		UV keyring
+Zane.rem		UV keyring
+Blake.loc		UV keyring
+Genny.rem		UV keyring
+Mike.loc		cert-okayp
+quick.pgp		message-okayp
+random.pgp		message-okayp
+makefile		GPG keyrings
+gpg.conf		GPG keyrings
+Genny.keydef		GPG keyrings
+Genny.pubring		GPG keyrings
+Genny.secring		GPG keyrings
+Genny.pgp		GPG keyrings
+Blake.pgp		GPG keyrings
+
+

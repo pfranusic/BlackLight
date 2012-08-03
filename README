@@ -1,16 +1,26 @@
 BlackLight/README
 
-BlackLight is an open-source library for autonomic radios.
+BlackLight is an open-source library for autonomic communicators.
 
-An autonomic radio is a wireless transceiver with complete and exclusive control
-over the signals it transmits and receives.
-This is in contrast to conventional radios, such as smartphones,
+An autonomic communicator is a digital communications transceiver with 
+complete and exclusive control over the signals it transmits and receives.
+This is in contrast to conventional communicators, such as smartphones,
 which are subject to control by external entities.
 
-The library contains design files under an open-source license.
-The design files are the property of the BlackLight Trust.
-The design files can be used to fabricate autonomic radios.
+The BlackLight library consists of a set of design files.
+The design files include specifications for an FPGA-based reference monitor, 
+a file system, a CELP codec, a huge integer ALU, an OpenPGP transceiver,
+an AES codec, a TCP/IP stack, a FEC codec, a UWB modem, and an enclosure.
+The design files can be used to fabricate autonomic communicators.
 
-"Black" comes from the secure communications industry and connotes 
-a protected signal. "Light" signifies wideband electromagnetic radiation.
+The BlackLight library is open-source intellectual property.
+The current copyright owner is Peter Franusic.
+However, within the next year a Trust will be created,
+after which all BlackLight IP will be endowed to the Trust.
+A non-profit corporation will be founded to serve as Trustee.
+The directors will be experts in technology and law.
+
+All contributions to BlackLight are welcome.
+Send email to Peter Franusic <pete@sargo.com>.
+
 
