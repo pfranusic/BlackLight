@@ -1,0 +1,76 @@
+BlackLight/OpenPGP/RNG/README
+
+We demonstrate how to build a dynamic library containing an external C function, and 
+how to access that function with the Clozure Common Lisp Foreign Function Inteface (CCL FFI).
+See "Clozure CL Documentation" chapter 13 for more details.
+
+The C function true_random_32 is in the file "random.c".
+Compile this file into random.o with this makefile command:
+	random.o:	random.c
+			gcc -c random.c -o random.o
+
+A dynamic library containing the true_random_32 function is in the file "random.dylib".
+Build this file with this makefile command:
+	random.dylib:	random.o
+			gcc -dynamiclib -Wall -o random.dylib random.o
+
+The dynamic library should have the symbol "_true_random_32".
+Use the CCL-FFI "external" operator to verify this.
+	(external "_true_random_32")
+
+The Lisp function true-random-32 in the file "random.lisp".
+Here it is in its entirety:
+	(defun true-random-32 ()
+	  (let ((rng-dat) (rng-ptr) (n) (err))
+	    (open-shared-library "random.dylib")
+	    (multiple-value-bind (lnd lnp)
+				 (make-heap-ivector 1 '(unsigned-byte 32))
+				 (setq rng-dat lnd)
+				 (setq rng-ptr lnp))
+	    (setf err (external-call "_true_random_32"
+				     :address rng-ptr
+				     :unsigned-int))
+	    (if (not (= 0 err)) (error "_true_random_32 returned ~A" err))
+	    (setf n (aref rng-dat 0))
+	    (dispose-heap-ivector rng-dat)
+	    (close-shared-library "random.dylib")
+	    n))
+
+The "let" operator declares four symbols:
+"rng-dat" is where the C function output data goes.
+"rng-ptr" is a pointer to rng-dat.
+"n" is where the Lisp function output data goes.
+"err" is the error code that the C function returns.
+
+The "open-shared-library" operator maps the library's code and data 
+into CCL's address space and makes its exported symbols accessible to CCL.
+
+The "multiple-value-bind" operator sets up the data transfer
+between the C function arguments and the Lisp function arguments.
+The function "true_random_32" has one argument, 
+which is a pointer to an unsigned long integer.
+This pointer is "rng-ptr" and is the address of 
+the unsigned long integer "rng-dat".
+
+The "external-call" operator call the "true_random_32" function.
+It specifies an ":address" (rng-ptr) and an ":unsigned-int" (err).
+true_random_32 stores its output data at the specified address
+and returns an error code.
+
+The "setf n" and "aref" operators copy the 32-bit word
+from the 0th array element rng-dat, into the Lisp integer n.
+
+The "dispose-heap-ivector" operator frees the memory acquired
+in the multiple-value-bind step.
+
+The "close-shared-library" operator unmaps the library's code 
+and removes the library's symbols from the global namespace.
+Warning: Dynamic libraries cannot be closed on Darwin.
+
+Finally, the value of n is returned.
+
+The true-random-32 Lisp function can be tested with this expression,
+which prints an eight-digit hexadecimal value.
+	(format nil "~X" (true-random-32))
+
+

@@ -1882,65 +1882,6 @@ The AES-128 decryption function is not used in CFB mode.
 
 
 
-<h3> Distilled procedure </h3>
-
-The 12-step procedure for OpenPGP CFB mode in RFC-4880
-may be simplified by considering that the crucial steps are 3, 6, 9, and 12.
-These are the steps where output is produced.
-<ul>
-<li> Step 3 produces 16 octets: "C[1] through C[BS]."
-<li> Step 6 produces 2 octets: "C[BS+1] and C[BS+2]."
-<li> Step 9 produces 16 octets: "C[BS+3] through C[BS+(BS+2)]."
-<li> Step 12 produces 16 octets: "the next BS octets of ciphertext."
-</ul>
-
-We specify the procedure for BS = 16 and for the AES-128 algorithm.
-We also specify the procedure using only four steps (A, B, C, D)
-and where step D is repeated until the plaintext is exhausted.
-We first define the data structures.
-<p>
-
-The Plaintext register (P) contains all of the plaintext octets (bytes).
-The AES session key register (K) contains a 16-byte (128-bit) value.
-The Ciphertext register (C) is initially empty.
-The Feedback Register (FR) and the Feedback Register Encrypted (FRE)
-are 16-byte values.
-The Random Value register (RV) contains a 16-byte random value.
-The most significant byte of a register has index 1.
-For example, the most significant byte of FRE is FRE[1].
-<p>
-
-<b> Step A: C[1] C[2] ... C[16] </b><br>
-The FR is reset to all zeros.
-Then the contents of FR is AES-128 encrypted using the session key K
-and the 16-byte result is written into FRE.
-The 16 bytes in FRE is xor-ed with the 16 bytes in RV
-and the 16-byte result is written to C[1] through C[16].
-<p>
-
-<b> Step B: C[17] C[18] </b><br>
-The FR is set to the 16-byte value in C[1] through C[16].
-Then the contents of FR is AES-128 encrypted using the session key K
-and the 16-byte result is written into FRE.
-The two bytes in FRE[1] and FRE[2] are xor-ed with the two bytes in RV[15] and RV[16]
-and the two-byte result is written to C[17] and C[18].
-<p>
-
-<b> Step C: C[19] C[20] ... C[34] </b><br>
-The FR is set to the 16-byte value in C[3] through C[18].
-Then the contents of FR is AES-128 encrypted using the session key K
-and the 16-byte result is written into FRE.
-The 16 bytes of FRE is xor-ed with the 16 bytes of P[1] through P[16]
-and the 16-byte result is written to C[19] through C[34].
-<p>
-
-<b> Step D: C[35] C[36] ... C[50] </b><br>
-The FR is set to the value in C[19] through C[34].
-Then the contents of FR is AES-128 encrypted using the session key K
-and the 16-byte result is written into FRE.
-The 16 bytes of FRE is xor-ed with the 16 bytes of P[17] through P[32]
-and the 16-byte result is written to C[35] through C[50].
-<p>
 
 <br>
 <hr color="#00FF00">

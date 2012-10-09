@@ -285,6 +285,33 @@
 
 
 ;;;
+;;; equal-arrays
+;;;
+
+(defun equal-arrays (a b)
+  (if (not (and (arrayp a)
+		(arrayp b)
+		(= (length a) (length b))))
+      (return-from equal-arrays NIL))
+  (dotimes (i (length a))
+    (if (/= (aref a i) (aref b i))
+	(return-from equal-arrays NIL)))
+  T)
+
+
+;;;
+;;; zeros
+;;; returns a list with n zeros
+;;;
+
+(defun zeros (n)
+  (let ((y nil))
+    (dotimes (i n)
+      (push 0 y))
+    y))
+
+
+;;;
 ;;; stdlib-okayp
 ;;;
 
@@ -298,5 +325,4 @@
        (not (decimal-digit-p #\a))
        (lower-alpha-p #\a)
        (not (lower-alpha-p #\A))))
-
 

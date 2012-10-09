@@ -2,7 +2,7 @@
 ;;;; Copyright 2012 Peter Franusic
 ;;;;
 ;;;; This file contains code for the modex function.
-;;;; modex calls two custom functions, otimes and log2+.
+;;;; modex calls two custom functions, otimes and msbno.
 ;;;; modex-okayp tests the modex function.
 ;;;; 
 
@@ -48,7 +48,7 @@
 
 
 ;;;
-;;; log2+
+;;; msbno
 ;;; returns the bit position of the msb of x.
 ;;; The do list has two arguments.
 ;;; The first argument has two expressions "(y 1 (* y 2))" and "(n 0 (+ n 1))".
@@ -58,17 +58,17 @@
 ;;; The first expression tests whether y is greater than x.
 ;;; The second expression is evaluated when the first expression is true.
 ;;; It decrements n and returns the result.
-;;; Ex: (log2+ 4096) => 12
+;;; Ex: (msbno 4096) => 12
 ;;;
 
-(defun log2+ (x)
+(defun msbno (x)
   (do ((y 1 (* y 2))
        (n 0 (+ n 1)))
       ((> y x) (1- n))))
 
 
 ;;;
-;;; modex
+;;; modex ["simple" modex]
 ;;; returns the modular product of the base to the exponent power.
 ;;; modex is implemented using the square-and-multiply algorithm.
 ;;; We start by setting the local register "r" to the base.
@@ -84,10 +84,10 @@
 ;;;
 
 (defun modex (a x n)
-  (do ((r 1) (msb (log2+ x) (- msb 1))) ((< msb 0) r)
-    (setf r (otimes r r n))
-    (if (logbitp msb x)
-	(setf r (otimes r a n)))))
+  (do ((r 1) (msb (msbno x) (- msb 1))) ((< msb 0) r)
+      (setf r (otimes r r n))
+      (if (logbitp msb x)
+	  (setf r (otimes r a n)))))
 
 
 ;;;
@@ -111,5 +111,4 @@
       (setf z (modex y d n))
       (if (/= x z) (return-from modex-okayp NIL)))
     T))
-
 

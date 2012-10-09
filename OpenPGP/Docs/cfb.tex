@@ -1,0 +1,900 @@
+%@.tex
+%%%% cfb.src
+%%%% OpenPGP Cipher Feedback (CFB) mode
+%%%% Copyright 2012 Peter Franusic
+%%%%
+
+\documentclass{article}
+%\pagestyle{empty}
+
+%%%% Various environments
+\usepackage{verbatim}
+\usepackage{graphicx}
+\usepackage{latexsym}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+%%%% Easy-vision mode
+%\usepackage[usenames]{color}
+%\pagecolor{black}
+%\color{green}
+
+%%%% math-mode commands
+\newcommand{\xbyte}{\mathrm{byte}}
+\newcommand{\xqeq}{\overset{?}{=}}
+
+%%%% European-style paragraphs
+%%%% IMPORTANT: \begin{document} must follow for this to work.
+\setlength{\parindent}{0pt} 
+\setlength{\parskip}{1.3ex} 
+\begin{document}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\textbf{\huge{CFB}}
+\vspace{8ex}
+
+\emph{Cipher feedback} (CFB) is a block cipher mode of operation.
+
+A \emph{block cipher} encrypts plaintext in short blocks.
+For example, AES-128 is a block cipher that encrypts plaintext in 128-bit blocks.
+A plaintext message is split into plaintext blocks $P_i$,
+a block cipher $\kappa$ encrypts each plaintext block into a ciphertext block $C_i$,
+and each ciphertext block is then transmitted.
+
+Plaintext messages often contain well-known strings; an example is an email header.
+Well-known strings can be a big problem, even if they are encrypted.
+For instance, if a block cipher is used without something like CFB, 
+a cryptanalyst can collect ciphertexts of email headers, compile a codebook,
+and then spoof encrypted emails, all without knowing the key.
+
+CFB mode uses the same encryption function in both CFB encode and CFB decode functions.
+For example, if an CFB encode function calls the AES-128 encryption function,
+then the inverse CFB decode function also calls the AES-128 encryption function.
+Decryption functions are not used in CFB mode.
+
+\section*{Literature}
+
+CFB mode was originally used in conjunction with the Data Encryption Standard (DES) 
+and is specified in the 1980 document \emph{DES Modes of Operation} along with tables of examples.
+[FIPS PUB 81].
+
+Schneier discusses CFB mode in his 1994 book \emph{Applied Cryptography} in section 8.1.4,
+and Figure 8.5 offers two block diagrams for 8-bit CFB mode, one for encryption and 
+the other for decryption. [Schneier 1994]
+
+Menezes et al discuss CFB mode in their 1996 \emph{Handbook of Applied Cryptography}
+in section 7.2.2 (iii).  Figure 7.1 (c) offers two block diagrams for r-bit CFB mode,
+and Algorithm 7.17 provides the details. [HAC 1999]
+
+CFB mode is also specified in the 2001 NIST document \emph{Recommendation for Block Cipher 
+Modes of Operation} in section 6.3 and illustrated in Figure 3.  The document also 
+provides example vectors for CFB-128 encipherment and AES-128 encryption in Appendix F.3.13
+and CFB-128 decipherment and AES-128 encryption in Appendix F.3.14. [NIST SP 800-38A]
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Electronic codebook}
+
+To develop an understanding of CFB mode, 
+it's best to start with the simplest block cipher mode.
+This is \emph{electronic codebook} mode (ECB).
+The ECB encoder computes each ciphertext block $C_i$ by simply
+applying the block cipher function $\kappa$ to each plaintext block $P_i$.
+\[ C_i = \kappa(P_i) \]
+
+The ECB decoder recovers each plaintext block $P_i$ by
+applying the inverse block cipher function $\hat{\kappa}$ 
+to each ciphertext block $C_i$.
+\[ P_i = \hat{\kappa}(C_i) \]
+
+Schneier identifies several shortfalls of ECB.
+``The problem with ECB mode is that if cryptanalysts have the plaintext and ciphertext
+for several messages, they can start to compile a codebook without knowing the key.
+In most real-world situations, fragments of messages tend to repeat \ldots
+This vulnerability is greatest at the beginning and end of messages,
+where well-defined headers and footers contain information about the sender,
+receiver, date, etc.''
+
+Another problem is the block replay vulnerability.
+Mallet opens two bank accounts, one with Bank 1 and the other with Bank 2.
+He sets up a recording device on the EFT channel between the two banks.
+He orders funds transfers from his Bank 1 account to his Bank 2 account
+and identifies the corresponding ECB blocks on the channel.
+Then he simply replays those blocks on the channel and watches his Bank 2 account grow.
+
+These vulnerabilities do not exist in cipher feedback mode,
+which uses a simple function to augment the block cipher.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Cipher feedback}
+
+The cipher feedback mode uses the exclusive-OR operator
+and a feedback loop to introduce complexity.
+The exclusive-OR operator is represented by the symbol $\oplus$.
+It is also abbreviated \emph{xor} (pronounced ``ex or'').
+It has several useful features: the identity element is 0,
+the inverse of any element $A$ is itself, and 
+the associative property holds.
+\begin{eqnarray}
+  A \oplus 0 &=& A \\
+  A \oplus A &=& 0 \\
+  (A \oplus B) \oplus C &=& A \oplus (B \oplus C)
+\end{eqnarray}
+
+The CFB encode function computes the current ciphertext block $C_i$
+by applying the encryption function $\kappa$ 
+to the previous ciphertext block $C_{i-1}$
+and then xor-ing that with the current plaintext block $P_i$.
+\[ C_i = P_i \oplus \kappa(C_{i-1}) \]
+
+The CFB decode function recovers the current plaintext block $P_i$
+by applying the encryption function $\kappa$ 
+to the previous ciphertext block $C_{i-1}$
+and then xor-ing that with the current ciphertext block $C_i$.
+Note that the encryption function $\kappa$ is used
+rather than the decryption function $\hat{\kappa}$.
+\[ P_i = C_i \oplus \kappa(C_{i-1}) \]
+
+The equation for $P_i$ can be derived from $C_i$.
+We start with the equation for $C_i$ and ``add'' $\kappa(C_{i-1})$ to both sides.
+The associative property lets us shift the square brackets on the right side.
+The two xored $\kappa(C_{i-1})$ terms cancel because $A \oplus A = 0$.
+And we can drop the 0 because $A \oplus 0 = A$.
+Rearranging, we get the equation for $P_i$.
+\begin{eqnarray*}
+  C_i  &=&  P_i \oplus \kappa(C_{i-1}) \\
+  C_i \oplus \kappa(C_{i-1})  &=&
+      \big[ P_i \oplus \kappa(C_{i-1}) \big] \; \oplus \; \kappa(C_{i-1}) \\
+  C_i \oplus \kappa(C_{i-1})  &=&
+      P_i \; \oplus \; \big[ \kappa(C_{i-1}) \oplus \kappa(C_{i-1}) \big] \\
+  C_i \oplus \kappa(C_{i-1})  &=&  P_i \oplus 0 \\
+  C_i \oplus \kappa(C_{i-1})  &=&  P_i \\
+  P_i  &=&  C_i \oplus \kappa(C_{i-1}) \qquad \Box
+\end{eqnarray*}
+
+The CFB encode function computes successive ciphertext blocks $C_i$.
+It takes a plaintext block $P_i$ and xors it with 
+an encryption of the previous ciphertext block, $\kappa(C_{i-1})$.
+This works great except for the initial case where we compute $C_0$.
+That is, what do we use for $C_{-1}$?  It doesn't exist!
+\[ C_0 = P_0 \oplus \kappa(C_{-1}) \]
+
+The CFB decode function computes successive plaintext blocks $P_i$.
+It takes a ciphertext block $C_i$ and xors it with 
+an encryption of the previous ciphertext block, $\kappa(C_{i-1})$.
+We have the same problem with $C_{-1}$.
+\[ P_0 = C_0 \oplus \kappa(C_{-1}) \]
+
+And we have another problem with CFB decode.
+It's possible to decode thousands of blocks of ciphertext with the wrong key.
+We need some way to verify, at the beginning of CFB decode,
+that we have the correct key.
+
+The $C_{-1}$ problem is solved by replacing $\kappa(C_{-1})$ with $\kappa(0)$.
+The key verification problem is solved by using a random block $R$.
+With these two solutions, we can write complete algorithms 
+for the basic CFB encode and decode functions.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Basic CFB} 
+
+We need a random block $R$.  For a block size of n bits, 
+$R$ is a randomly-selected value anywhere between 0 and $2^n-1$ inclusive.
+\[ R \in \{ 0, 1, \ldots, (2^n-1) \} \]
+
+\begin{quote}
+\textbf{Basic CFB encoder:}\\
+Select a random $R$.
+Compute and output both preliminary blocks $C_x$ and $C_y$.
+Then input plaintext block $P_i$ and output ciphertext block $C_i$.
+\begin{eqnarray*}
+  R    &=&  \mathrm{rand}(2^n) \\
+  C_x  &=&  R  \oplus  \kappa(0)  \\
+  C_y  &=&  R  \oplus  \kappa(C_x)  \\
+  C_0  &=&  P_0  \oplus  \kappa(C_y)  \\
+  C_1  &=&  P_1  \oplus  \kappa(C_0)  \\
+  C_2  &=&  P_2  \oplus  \kappa(C_1)  \\
+  &\vdots&
+\end{eqnarray*}
+
+\textbf{Basic CFB decoder:}\\
+Input ciphertext blocks $C_x$ and $C_y$.
+Compute both $R$ and $R'$ and make sure they're equal.
+Then input ciphertext block $C_i$ and output plaintext block $P_i$.
+\begin{eqnarray*}
+  R  &=&  C_x  \oplus  \kappa(0)  \\
+  R' &=&  C_y  \oplus  \kappa(C_x)  \\
+  R  &\xqeq&  R' \\
+  P_0  &=&  C_0  \oplus  \kappa(C_y)  \\
+  P_1  &=&  C_1  \oplus  \kappa(C_0)  \\
+  P_2  &=&  C_2  \oplus  \kappa(C_1)  \\
+  &\vdots&
+\end{eqnarray*}
+\end{quote}
+
+In OpenPGP, these two algorithms are more complicated.
+They require three preliminary blocks instead of two.
+$C_x$ is the same, but $C_y$ is truncated, 
+and an additional \emph{resynchronization} block $C_z$ is required.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{OpenPGP CFB}
+
+The definitive guide for OpenPGP CFB mode is RFC-4880.
+Section 13.9 provides the following twelve step algorithm for the CFB encode function.
+An algorithm for the CFB decode function is not specified in RFC-4880.
+Unfortunately, the authors describe the algorithm without mathematical notation.
+Instead they employ a sort of register transfer language.
+FR is the feedback register. FRE is the encrypted feedback register.
+IV is the initialization vector.
+They also use the term ``octet'' instead of ``byte'' which is more common.
+BS is the block size, either 8 octets (64 bits) or 16 octets (128 bits).
+\begin{quote}
+\begin{enumerate}
+
+\item The feedback register (FR) is set to the IV, which is all zeros.
+
+\item FR is encrypted to produce FRE (FR Encrypted).
+      This is the encryption of an all-zero value.
+
+\item FRE is xored with the first BS octets of random data prefixed to the plaintext
+      to produce C[1] through C[BS], the first BS octets of ciphertext.
+
+\item FR is loaded with C[1] through C[BS].
+
+\item FR is encrypted to produce FRE,
+      the encryption of the first BS octets of ciphertext.
+
+\item The left two octets of FRE get xored with the next two octets of
+      data that were prefixed to the plaintext.  This produces C[BS+1]
+      and C[BS+2], the next two octets of ciphertext.
+
+\item (The resynchronization step) FR is loaded with C[3] through C[BS+2].
+
+\item FR is encrypted to produce FRE.
+
+\item FRE is xored with the first BS octets of the given plaintext, now
+      that we have finished encrypting the BS+2 octets of prefixed data.
+      This produces C[BS+3] through C[BS+(BS+2)], the next BS octets of ciphertext.
+
+\item FR is loaded with C[BS+3] to C[BS + (BS+2)] (which is C11-C18 for an 8-octet block).
+
+\item FR is encrypted to produce FRE.
+
+\item FRE is xored with the next BS octets of plaintext, to produce
+      the next BS octets of ciphertext.  These are loaded into FR, and
+      the process is repeated until the plaintext is used up.
+
+\end{enumerate}
+\end{quote}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Distillation}
+
+The twelve-step procedure may be distilled.
+Consider that the crucial steps are 3, 6, 9, and 12.
+These are the steps where output is produced.
+Step 3 produces ``C[1] through C[BS].''
+Step 6 produces ``C[BS+1] and C[BS+2].''
+Step 9 produces ``C[BS+3] through C[BS+(BS+2)].''
+Step 12 produces ``the next BS octets of ciphertext.''
+
+We specify a distilled procedure with BS = 16 and AES-128 encryption.
+The distilled procedure uses only four steps (A, B, C, D).
+Step D is repeated until the plaintext is exhausted.
+The Plaintext register (P) contains all of the plaintext octets (bytes).
+The AES session key register (K) contains a 16-byte (128-bit) value.
+The Ciphertext register (C) is initially empty.
+The Feedback Register (FR) and the Feedback Register Encrypted (FRE) are 16-byte values.
+The Random value register (R) contains a 16-byte random value.
+The most significant byte of a register has index 1.
+For example, the most significant byte of FRE is FRE[1].
+
+\begin{quote}
+\textbf{Step A: C[1] C[2] ... C[16]}\\
+The FR is reset to all zeros.
+Then the contents of FR is AES-128 encrypted using the session key K
+and the 16-byte result is written into FRE.
+The 16 bytes in FRE is xored with the 16 bytes in R
+and the 16-byte result is written to C[1] through C[16].
+\vspace{2ex}
+
+\textbf{Step B: C[17] C[18]}\\
+The FR is set to the 16-byte value in C[1] through C[16].
+Then the contents of FR is AES-128 encrypted using the session key K
+and the 16-byte result is written into FRE.
+The two bytes in FRE[1] and FRE[2] are xored with the two bytes in R[15] and R[16]
+and the two-byte result is written to C[17] and C[18].
+\vspace{2ex}
+
+\textbf{Step C: C[19] C[20] ... C[34]}\\
+The FR is set to the 16-byte value in C[3] through C[18].
+Then the contents of FR is AES-128 encrypted using the session key K
+and the 16-byte result is written into FRE.
+The 16 bytes of FRE is xored with the 16 bytes of P[1] through P[16]
+and the 16-byte result is written to C[19] through C[34].
+\vspace{2ex}
+
+\textbf{Step D: C[35] C[36] ... C[50]}\\
+The FR is set to the value in C[19] through C[34].
+Then the contents of FR is AES-128 encrypted using the session key K
+and the 16-byte result is written into FRE.
+The 16 bytes of FRE is xored with the 16 bytes of P[17] through P[32]
+and the 16-byte result is written to C[35] through C[50].
+\end{quote}
+
+The algorithm in RFC-4880 does not specify what to do when 
+the number of plaintext bytes is not a multiple of the block size BS.
+But it turns out that Steps C and D must be slightly modified to account for these cases.
+If the number of bytes remaining in the plaintext queue is $0 < n < 16$,
+then the 16 bytes of FRE are xored with a special 16-byte padded block,
+but only $n$ ciphertext octets are actually emitted.
+The 16-byte padded block consists of the remaining $n$ bytes and $16-n$ padding bytes.
+The positions of these bytes does not matter as long as the decoder follows that same pattern.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Encode algorithm}
+
+Now we specify the algorithm for the OpenPGP CFB encode function.
+We use the same four steps as above.
+But instead of register transfer language, we use mathematical notation.
+This avoids the feedback register and the encrypted feedback register.
+We use uppercase variables for 128-bit values (e.g. $C_0$)
+and lowercase variables for 8-bit values (e.g. $c_{19}$).
+
+\begin{quote}
+\textbf{Step A:}\\
+Select a random value for $R$ between 0 and $2^{128}$.
+Compute $C_x$ as the xor of $R$ and $\kappa(0)$.
+Split $C_x$ into 16 ciphertext bytes and output them as $c_{1}\ c_{2}\ \ldots\ c_{16}$.
+\begin{eqnarray*}
+  R &=& \mathrm{rand}(2^{128}) \\
+  C_x &=& R \oplus \kappa(0) \\
+  c_j &=& \xbyte_{16-j}(C_x) \qquad j \in [1,16] \\
+\end{eqnarray*}
+
+\textbf{Step B:}\\
+Compute $C_y$ as the xor of the most-significant word (msw) 
+of the encryption of $C_x$ with the least-significant word (lsw) in $R$.
+Split $C_y$ into 2 ciphertext bytes and output them as $c_{17}\ c_{18}$.
+\begin{eqnarray*}
+  C_y &=& \mathrm{msw}(\kappa(C_x)) \oplus \mathrm{lsw}(R) \\
+  c_{17} &=& \xbyte_{1}(C_y) \\
+  c_{18} &=& \xbyte_{0}(C_y) \\
+\end{eqnarray*}
+
+\textbf{Step C:}\\
+Initialize $i$ to 0.
+Compute $C_z$ as the lower 7 words of $C_x$ multiplied by 65536 and then added to $C_y$.
+Let $n$ be the number of remaining plaintext bytes.
+Input up to 16 plaintext bytes $p_{1}\ p_{2}\ \ldots$ and merge them into $P_0$.
+If $n<16$ then pad $P_0$ in the least-significant bytes.
+Compute $C_0$ as the xor of $P_0$ and $\kappa(C_z)$.
+Split $C_0$ into 16 ciphertext bytes and output $n$ of them as $c_{19}\ c_{20}\ \ldots$
+\begin{eqnarray*}
+  i &=& 0 \\
+  C_z &=& 65536 \cdot \mathrm{L}_7(C_x) + C_y  \\
+  P_0 &=& \sum_{j=1}^{16} 256^{16-j} \cdot p_{j} \\
+  C_0 &=& P_0 \oplus \kappa(C_z) \\
+  c_{18+j} &=& \xbyte_{16-j}(C_0) \qquad j \in [1,16] \\
+\end{eqnarray*}
+
+\textbf{Step D:}\\
+Increment $i$.
+Let $n$ be the number of remaining plaintext bytes.
+If $n=0$ then terminate.
+Input up to 16 plaintext bytes $p_{16i+1}\ p_{16i+2}\ \ldots$ and merge them into $P_i$.
+If $n<16$ then pad $P_i$ in the least-significant bytes.
+Compute $C_i$ as the xor of $P_i$ and $\kappa(C_{i-1})$.
+Split $C_i$ into 16 ciphertext bytes and output $n$ of them as $c_{16i+19}\ c_{16i+20}\ \ldots$
+Repeat this step.
+\begin{eqnarray*}
+  i &=& i + 1 \\
+  P_i &=& \sum_{j=1}^{16} 256^{16-j} \cdot p_{16i+j} \\
+  C_i &=& P_i \oplus \kappa(C_{i-1}) \\
+  c_{16i+18+j} &=& \xbyte_{16-j}(C_i) \qquad j \in [1,16] \\
+\end{eqnarray*}
+\end{quote}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Decode algorithm}
+
+As mentioned above, RFC-4880 does not specify an algorithm for the OpenPGP CFB decode function.
+However, it is easy enough to derive the decoder equations from the encoder equations.
+For $R$, $P_0$, and $P_i$ we use the same trick that we used in the proof, 
+where we add $\kappa(X)$ to both sides.
+For $C_y$ and $C_z$ we use the same equation as the encoder function.
+
+\begin{quote}
+\textbf{Step A:}\\
+Input 16 ciphertext bytes $c_{1}\ c_{2}\ \ldots\ c_{16}$ and merge them into $C_x$.
+Then compute the random block $R$ as the xor of $C_x$ and $\kappa(0)$.
+\begin{eqnarray*}
+  C_x &=& \sum_{j=1}^{16} 256^{16-j} \cdot c_{j} \\
+  R &=& C_x \oplus \kappa(0) \\
+\end{eqnarray*}
+
+\textbf{Step B:}\\
+Compute $C_y$ as the xor of the most-significant word (msw) 
+of the encryption of $C_x$ with the least-significant word (lsw) in $R$.
+Input the 2 ciphertext bytes $c_{17}\ c_{18}$ and merge them into $C_y'$.
+Verify that $C_y$ and $C_y'$ are equal.
+\begin{eqnarray*}
+  C_y  &=& \mathrm{msw}(\kappa(C_x)) \oplus \mathrm{lsw}(R) \\
+  C_y' &=& 256 \cdot c_{17} + c_{18} \\
+  C_y  &\xqeq& C_y' \\
+\end{eqnarray*}
+
+\textbf{Step C:}\\
+Initialize $i$ to 0.
+Compute $C_z$ as the lower 7 words of $C_x$ multiplied by 65536 and then added to $C_y$.
+Let $n$ be the number of remaining ciphertext bytes.
+Input up to 16 ciphertext bytes $c_{19}\ p_{20}\ \ldots$ and merge them into $C_0$.
+If $n<16$ then pad $C_0$ in the least-significant bytes.
+Compute $P_0$ as the xor of $C_0$ and $\kappa(C_z)$.
+Split $P_0$ into 16 plaintext bytes and output $n$ of them as $p_{1}\ p_{2}\ \ldots$
+\begin{eqnarray*}
+  i &=& 0 \\
+  C_z &=& 65536 \cdot \mathrm{L}_7(C_x) + C_y  \\
+  C_0 &=& \sum_{j=1}^{16} 256^{16-j} \cdot c_{18+j} \\
+  P_0 &=& C_0 \oplus \kappa(C_z) \\
+  p_j &=& \xbyte_{16-j}(P_0) \qquad j \in [1,16] \\
+\end{eqnarray*}
+
+\textbf{Step D:}\\
+Increment $i$.
+Let $n$ be the number of remaining ciphertext bytes.
+If $n=0$ then terminate.
+Input up to 16 ciphertext bytes $c_{16i+19}\ c_{16i+20}\ \ldots$ and merge them into $C_i$.
+If $n<16$ then pad $C_i$ in the least-significant bytes.
+Compute $P_i$ as the xor of $C_i$ and $\kappa(C_{i-1})$.
+Split $P_i$ into 16 plaintext bytes and output $n$ of them as $p_{16i+1}\ p_{16i+2}\ \ldots$
+Repeat this step.
+\begin{eqnarray*}
+  i &=& i + 1 \\
+  C_i &=& \sum_{j=1}^{16} 256^{16-j} \cdot c_{16i+18+j} \\
+  P_i &=& C_i \oplus \kappa(C_{i-1}) \\
+  p_{16i+j} &=& \xbyte_{16-j}(P_i) \qquad j \in [1,16] \\
+\end{eqnarray*}
+\end{quote}
+
+
+
+\end{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+%@.tex
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{\texttt{cfb-128-encode}}
+
+Input is a 128-bit session key integer k and a list of plaintext bytes p-list.
+Output is a list of ciphertext bytes c-list.
+Expands the session key k into a 44-word key schedule,
+performs the AES-128 Cipher function in OpenPGP CFB Mode on all bytes in p-list,
+and returns c-list.
+
+%@.cl
+\begin{verbatim}
+(defun cfb-128-encode (k p-list)
+  (let ((w) (n) (r) (c-list))
+    
+    ;; Make sure the inputs are okay.
+    ;; Create key schedule w from session key k.
+    (if (not (and (integerp k) (plusp k) (< (log k 2) 128)))
+	(error "k must be a positive integer less than 2^128"))
+    (if (not (blistp p-list))
+	(error "p-list must be a non-empty list of bytes"))
+    (setf w (aes-128-expand k))
+
+    ;; Step A:
+    ;; Select a random value for r.
+    ;; Compute cx as the xor of r and k(0).
+    ;; Split cx into 16 bytes and output them.
+    (setf r (random (expt 2 128)))
+    (setf cx (logxor (aes-128-cipher w 0) r))
+    (setf c-list (split-int 16 cx))
+
+    ;; Step B:
+    ;; Compute cw as the encryption of cx.
+    ;; Compute cy as the xor of the msw and the lsw.
+    ;; Split cy into 2 bytes and append them to c-list.
+    (setf cw (aes-128-cipher w cx))
+    (setf cy (logxor (quo cw (expt 2 112)) (rem r (expt 2 16))))
+    (setf c-list (append c-list (split-int 2 cy)))
+
+    ;; Step C:
+    ;; Compute cz = 65536*L7(cx) + cy.
+    ;; Let n be the number of remaining plaintext bytes.
+    ;; Input up to 16 plaintext bytes and merge them into p.
+    ;; If n < 16 then pad p in the least-significant bytes.
+    ;; Compute c0 as the xor of p0 and k(cz).
+    ;; Output n bytes of c0.
+    (setf cz (unite-int (subseq c-list 2 18)))
+    (setf n (length p-list))
+    (setf p0 0)
+    (dotimes (i n)
+      (setf p0 (+ (* 256 p0) (pop p-list))))
+    (dotimes (i (- 16 n))
+      (setf p0 (* 256 p0)))
+    (setf c0 (logxor p0 (aes-128-cipher w cz)))
+    (setf c-list (append c-list (subseq (split-int 16 c0) 0 n)))
+
+    ;; Step D:
+    ;;; While p-list is not empty:
+    ;;; Let n be the number of remaining bytes in p-list.
+    ;;; Compute the 128-bit integer $p_i$ from the remaining n bytes,
+    ;;; trailed by (- 16 n) dummy bytes in the least-significant bits.
+    ;;; Compute the 128-bit integer $c_i = aes(c_{i-1}) + p_i$.
+    ;;; Split $c_i$ into 16 bytes and append the first n bytes to c-list.
+    ;;; Remove n bytes from p-list.
+    (while (> (setf n (length p-list)) 0)
+      (setf f (logxor (aes-cipher-128 w f)
+		      (unite-int (append p-list (listn (- 16 n) 0)))))
+      (setf c-list (append c-list (subseq (split-int 16 f) 0 n)))
+      (dotimes (i n) (pop p-list)))
+    ;;; Return c-list.
+    c-list))
+\end{verbatim}
+
+
+\begin{comment}
+%%%%%%%%%%%%%%%
+Input is a 128-bit session key integer k and a list of plaintext bytes p-list.
+Output is a list of ciphertext bytes c-list.
+
+  Step A:
+  Make sure the inputs are okay.
+  Create key schedule w from session key k.
+  Create r-list with 16 random byte values.
+
+  Step B:
+  Compute the 128-bit integer $r_i$ from r-list.
+  Compute the 128-bit integer $c_{-2} = aes(0) + r_i$
+  Split $c_{-2}$ into 16 bytes and initialize c-list.
+
+  Step C:
+  Compute the 16-bit integer $r_q$ from (subseq r-list 14 16).
+  Compute the 16-bit integer $c_q = msw(aes(c_{-2})) + r_q$.
+  Split $c_q$ into 2 bytes and append them to c-list.
+
+  Step D:
+  Compute the 128-bit integer $c_{-1}$ from (subseq c 2 18).
+
+  Step E:
+  While there are at least 16 bytes in p-list:
+  Compute the 128-bit integer $p_i$ from the next 16 bytes in p-list.
+  Compute the 128-bit integer $c_i = aes(c_{i-1}) + p_i$
+  Split $c_i$ into 16 bytes and append them to c-list.
+  Remove 16 bytes from p-list.
+
+  Step F:
+  While p-list is not empty:
+  Let n be the number of remaining bytes in p-list.
+  Compute the 128-bit integer $p_i$ from the remaining n bytes,
+  trailed by (- 16 n) dummy bytes in the least-significant bits.
+  Compute the 128-bit integer $c_i = aes(c_{i-1}) + p_i$.
+  Split $c_i$ into 16 bytes and append the first n bytes to c-list.
+  Remove n bytes from p-list.
+
+  Step G:
+  Return c-list.
+
+%%%%%%%%%%%%%%%
+\end{comment}
+
+
+%@.tex
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{\texttt{cfb-128-decode}}
+Input is a 128-bit session key integer k and a list of ciphertext bytes c-list.
+Output is a list of plaintext bytes p-list.
+Expands the session key k into a 44-word key schedule,
+performs the AES-128 Cipher function in OpenPGP CFB Mode
+on all bytes in c-list, and returns p-list.
+
+%@.cl
+\begin{verbatim}
+(defun cfb-128-decode (k c-list)
+  (let ((w) (f) (n) (c_i) (p_i) (p-list))
+    ;;; Make sure the inputs are okay.
+    ;;; Create key schedule w from session key k.
+    (if (not (and (integerp k) (plusp k) (< (log k 2) 128)))
+	(error "k must be a positive integer less than 2^128"))
+    (if (not (and (blistp c-list) (>= (length c-list) 18)))
+	(error "c-list must be a list of bytes with at least 18 elements"))
+    (setf w (aes-expand-128 k))
+    ;;; Construct the 128-bit integer $c_{-1}$ from (subseq c 2 18).
+    ;;; Remove 18 bytes from c-list.
+    (setf c_i (unite-int (subseq c-list 2 18)))
+    (dotimes (i 18) (pop c-list))
+    ;;; While there are at least 16 bytes in c-list:
+    ;;; Compute the 128-bit integer $c_i$ from the next 16 bytes in c-list.
+    ;;; Compute the 128-bit integer $p_i = aes(c_{i-1}) + c_i$.
+    ;;; Split $p_i$ into 16 bytes and append them to p-list.
+    ;;; Remove 16 bytes from c-list.
+    (while (>= (length c-list) 16)
+      (setf f c_i) ; Set feedback register to previous $c_i$.
+      (setf c_i (unite-int (subseq c-list 0 16)))
+      (setf p_i (logxor (aes-cipher-128 w f) c_i))
+      (setf p-list (append p-list (split-int 16 p_i)))
+      (dotimes (i 16) (pop c-list)))
+    ;;; While c-list is not empty:
+    ;;; Let n be the number of remaining bytes in c-list.
+    ;;; Compute the 128-bit integer $c_i$ from the remaining n bytes,
+    ;;; trailed by (- 16 n) dummy bytes in the least-significant bits.
+    ;;; Compute the 128-bit integer $p_i = aes(c_{i-1}) + c_i$.
+    ;;; Split $p_i$ into 16 bytes and append the first n bytes to p-list.
+    ;;; Remove n bytes from c-list.
+    (while (> (setf n (length c-list)) 0)
+      (setf f c_i)
+      (setf c_i (unite-int (append (subseq c-list 0 n) (listn (- 16 n) 0))))
+      (setf p_i (logxor (aes-cipher-128 w f) c_i))
+      (setf p-list (append p-list (subseq (split-int 16 p_i) 0 n)))
+      (dotimes (i 16) (pop c-list)))
+    ;;; Return p-list.
+    p-list))
+\end{verbatim}
+
+
+\begin{comment}
+%%%%%%%%%%%%%%%
+Input is a 128-bit session key integer k and a list of ciphertext bytes c-list.
+Output is a list of plaintext bytes p-list.
+
+  Step A:
+  Make sure the inputs are okay.
+  Create key schedule w from session key k.
+
+  Step D:
+  Compute the 128-bit integer $c_{-1}$ from (subseq c 2 18).
+  Remove 18 bytes from c-list.
+
+  Step E:
+  While there are at least 16 bytes in c-list:
+  Compute the 128-bit integer $c_i$ from the next 16 bytes in c-list.
+  Compute the 128-bit integer $p_i = aes(c_{i-1}) + c_i$.
+  Split $p_i$ into 16 bytes and append them to p-list.
+  Remove 16 bytes from c-list.
+
+  Step F:
+  While c-list is not empty:
+  Let n be the number of remaining bytes in c-list.
+  Compute the 128-bit integer $c_i$ from the remaining n bytes,
+  trailed by (- 16 n) dummy bytes in the least-significant bits.
+  Compute the 128-bit integer $p_i = aes(c_{i-1}) + c_i$.
+  Split $p_i$ into 16 bytes and append the first n bytes to p-list.
+  Remove n bytes from c-list.
+
+  Step G:
+  Return p-list.
+
+%%%%%%%%%%%%%%%
+\end{comment}
+
+
+%@.tex
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{\texttt{cfb-okayp}}
+cfb-okayp tests the cfb-128-encode and cfb-128-decode functions.
+It selects the random 128-bit key k, builds a list x of plaintext bytes x,
+computes a list y of encoded bytes using key k and plaintext x, and
+computes a list z of decoded bytes using key k and ciphertext y.
+cfb-okayp returns true iff lists x and z are equal.
+
+%@.cl
+\begin{verbatim}
+(defun cfb-okayp ()
+  (let ((k) (x) (y) (z))
+    (setf k (random (expt 2 128)))
+    (setf x (random-bytes (+ 100 (random 16))))
+    (setf y (cfb-128-encode k x))
+    (setf z (cfb-128-decode k y))
+    (equal x z)))
+\end{verbatim}
+
+
+\section*{Equivalent version}
+
+The following is an equivalent version of the OpenPGP CFB algorithm.
+It is written using Lisp syntax and specifies the algorithm for AES-128,
+where the plaintext is processed in 128-bit chunks (16 bytes).
+
+First the data components:\\
+Session key k is a 128-bit integer.
+Plaintext p is a list of 8-bit integers, the plaintext bytes.
+Key schedule w is a vector of forty-four 32-bit integers derived from session key k.
+Random values r is a list of eighteen 8-bit integers, where the first sixteen bytes 
+(nth 0 r) through (nth 15 r) are random values, and the last two bytes (nth 16 r) 
+and (nth 17 r) are copies of bytes (nth 14 r) and (nth 15 r).
+Feedback register f is a 128-bit integer.
+Encrypted register e is a 128-bit integer.
+Ciphertext c is a list of 8-bit integers, the ciphertext bytes. It's initially empty.
+
+Next the two AES functions we'll need:\\
+aes-expand-128 takes session key k and computes and returns key schedule w.
+aes-cipher-128 takes key schedule w and a 128-bit plaintext integer,
+and returns a 128-bit ciphertext integer.
+Key schedule w must exist before aes-cipher-128 can be called.
+The idea is that aes-expand-128 is called once,
+after which aes-cipher-128 is called a bunch of times.
+
+The OpenPGP CFB algorithm requires seven initialization steps.
+The integer 0 is encrypted using aes-cipher-128 (steps 1 and 2 from above).
+The 128-bit product is xored with a 128-bit integer 
+composed of the first 16 random bytes in r,
+and the 128-bit sum is split into 16 bytes and appended to ciphertext list c (step 3).
+The feedback register f is loaded with the same 128-bit sum (step 4).
+Now things get slightly convoluted.
+
+The 128-bit value in f in encrypted using aes-cipher-128
+and the 128-bit product is written into e (step 5).
+The 16 most-significant bits of e are xored with a 16-bit integer
+composed of the last two bytes in r, and the 16-bit product is 
+split into 2 bytes and appended to ciphertext list c (step 6).
+Note that cipherext list c now has a length of 18.
+The feedback register f is now loaded with a 128-bit integer 
+that is composed of ciphertext bytes (nth 2 c) through (nth 17 c), 
+what RFC-4880 calls "resynchronization" (step 7).
+
+The 128-bit value in f in encrypted using aes-cipher-128
+and the 128-bit product is written into e (step 8).
+This 128-bit product is xored with a 128-bit integer 
+composed of the first 16 plaintext bytes in p,
+and the 128-bit sum is split into 16 bytes and appended to ciphertext list c (step 9).
+The feedback register f is loaded with the same 128-bit sum (step 10).
+
+The 128-bit value in f in encrypted using aes-cipher-128
+and the 128-bit product is written into e (step 11).
+This 128-bit product is xored with a 128-bit integer 
+composed of the next 16 plaintext bytes in p,
+and the 128-bit sum is split into 16 bytes and appended to ciphertext list c.
+The feedback register f is loaded with the same 128-bit sum (step 12).
+Steps 11 and 12 are repeated until there are no more bytes in plaintext list p.
+
+
+\section*{Simplification}
+
+The above algorithm is for a CFB encoder.
+A decoder algorithm is not provided by RFC-4880.
+Therefore it appears we must derive the decoder algorithm.
+To do that, we need to simplify things
+and figure out what is really going on.
+
+And what's really going on is this:
+With the exception of the first 18 bytes,
+to get the current block of ciphertext ($c_{i}$)
+we encrypt the previous block of ciphertext ($c_{i-1}$)
+and xor it with the current block of plaintext ($p_{i}$).
+\begin{displaymath}
+  c_{i} = k(c_{i-1}) + p_{i}
+\end{displaymath}
+
+Note that the encryption function is "k" and the xor operator is "+".
+Note also that we are able to specify the CFB algorithm without a feedback register.
+We simply use subscripts.
+
+We can reverse this process and recover the plaintext.
+To get the current block of plaintext ($p_{i}$)
+we encrypt the previous block of ciphertext ($c_{i-1}$)
+and xor it with the current block of ciphertext ($c_{i}$).
+\begin{displaymath}
+  p_{i} = k(c_{i-1}) + c_{i}
+\end{displaymath}
+
+The proof is simple because of the xor identity $a + a = 0$.
+We are given
+\begin{displaymath}
+  c_{i} = k(c_{i-1}) + p_{i}
+\end{displaymath}
+
+Now we simply "add" $k(c_{i-1})$ to both sides.
+\begin{displaymath}
+  c_{i} + k(c_{i-1}) = k(c_{i-1}) + p_{i} + k(c_{i-1})
+\end{displaymath}
+
+The xor operation is commutative, so on the right side, 
+the two $k(c_{i-1})$ terms cancel because $a + a = 0$.
+Rearranging the remaining terms we have
+\begin{displaymath}
+  p_{i} = k(c_{i-1}) + c_{i}
+\end{displaymath}
+Q.E.D.
+
+
+What remains is to describe the first 18 bytes of ciphertext.
+To compute the first 16-byte ciphertext block (which we'll call $c_{-2}$) 
+we encrypt 0 and xor it with the 16 random bytes r.
+\begin{displaymath}
+  c_{-2} = k(0) + r
+\end{displaymath}
+
+We recover $r$ with $c_{-2}$.
+The proof is the same as above, where we "add" $k(0)$ to both sides.
+\begin{displaymath}
+  r = k(0) + c_{-2}
+\end{displaymath}
+
+To compute the two "quick check" bytes (which we'll call $c_{q}$) 
+we encrypt the previous output block ($c_{-2}$) and
+strip off the most-significant 16 bits ($msw$) of the product, 
+and then xor that with the last two random bytes in r ($r_{q}$).
+\begin{displaymath}
+  c_{q} = msw(k(c_{-2})) + r_{q}
+\end{displaymath}
+
+Again, we can recover $r_{q}$ the same way.
+\begin{displaymath}
+  r_{q} = msw(k(c_{-2})) + c_{q}
+\end{displaymath}
+
+To compute the next block of ciphertext ($c_{0}$) 
+we encrypt the previous ciphertext block ($c_{-1}$)
+and xor it with the first plaintext block ($p_{0}$).
+The previous ciphertext block $c_{-1}$ is the list (subseq c 2 17).
+\begin{displaymath}
+  c_{0} = k(c_{-1}) + p_{0}
+\end{displaymath}
+
+To compute the next block of ciphertext ($c_{1}$) 
+we encrypt the previous ciphertext block ($c_{0}$) 
+and xor it with the next plaintext block ($p_{1}$).
+The previous ciphertext block $c_{-1}$ is the list (subseq c 2 17).
+\begin{displaymath}
+  c_{1} = k(c_{0}) + p_{1}
+\end{displaymath}
+
+
+\section*{Demonstration}
+We wish to demonstrate the basic encoder and decoder operations.
+We first encode one block of plaintext x into two blocks of ciphertext f and y.
+Next we decode those two blocks back into the one block of plaintext z.
+Finally we compare the original plaintext x with the decoded plaintext z.
+\begin{verbatim}
+
+Make a 128-bit key k.
+(setf k (random (expt 2 128)))
+
+Make the 44-element key-schedule array w.
+(setf w (aes-expand-128 k))
+
+Make the original plaintext block x.
+(setf x (random (expt 2 128)))
+
+Make the 1st ciphertext block f.
+(setf f (random (expt 2 128)))
+
+Make the 2nd ciphertext block y.
+(setf y (logxor (aes-cipher-128 w f) x))
+
+Make the decoded plaintext z.
+(setf z (logxor (aes-cipher-128 w f) y))
+
+See if they're the same.
+(= x z)
+
+Make the 2nd ciphertext block the 1st one.
+(setf f y)
+
+Make another plaintext block x.
+(setf x (random (expt 2 128)))
+
+Make another ciphertext block y.
+(setf y (logxor (aes-cipher-128 w f) x))
+
+Make another decoded plaintext z.
+(setf z (logxor (aes-cipher-128 w f) y))
+
+See if they're the same.
+(= x z)
+
+\end{verbatim}
+

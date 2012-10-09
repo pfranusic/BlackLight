@@ -1,4 +1,4 @@
-;;;; BlackLight/OpenPGP/keys.lisp
+;;;; BlackLight/OpenPGP/Code/keys.lisp
 ;;;; Copyright 2012 Peter Franusic
 ;;;;
 ;;;; Lisp code for BlackLight OpenPGP keys.
@@ -27,9 +27,8 @@
 ;;; RSA-RC is a "Remote Cipher" key is used to encrypt transmitted messages.
 ;;; Here we initialize *keyring* to the empty list.
 ;;; *keyring* can be loaded with the "load-keyring" command.
-;;;
-;;; (defparameter *keyring* nil)       
-;;;
+
+(defparameter *keyring* nil)       
 
 
 ;;;
@@ -422,7 +421,7 @@
 ;;; load-keyring
 ;;; returns the number of keys loaded into the keyring.
 ;;; Given the pathname of a directory, it checks the validity
-;;; of each keyfile named in the LOAD-THESE file.
+;;; of each keyfile named in the LOAD-KEYS file.
 ;;; If and only if each of these keyfiles is valid,
 ;;; it then loads each key onto the keyring.
 ;;; Ex: (load-keyring "../Test")
@@ -434,7 +433,7 @@
   (let ((keyfiles nil) (kf nil))
 
     ;; Check each key named in keyfiles.
-    (setf keyfiles (getlist (format nil "~A/LOAD-THESE" pathname)))
+    (setf keyfiles (getlist (format nil "~A/LOAD-KEYS" pathname)))
     (dotimes (i (length keyfiles))
       (setf kf (getlist (format nil "~A/~A" pathname (nth i keyfiles))))
       (if (not (and (= 2 (length kf))
@@ -468,5 +467,4 @@
 (defun keys-okayp ()
   (load-keyring "../Test")
   T)
-
 

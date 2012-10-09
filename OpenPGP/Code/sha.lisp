@@ -476,15 +476,14 @@
 ;;;;
 ;;;; SHA-256 sigma functions
 ;;;; (See FIPS PUB 180-2 section 4.1.2).
-;;;; SHA-265 uses the four functions $\Sigma^{256}_0$,
-;;;; $\Sigma^{256}_1$, $\sigma^{256}_0$, $\sigma^{256}_1$.
-;;;; Each operates on the single 32-bit word x
-;;;; and produces a 32-bit word as output.
+;;;; SHA-256 uses the four sigma functions 
+;;;; $\Sigma^{256}_0$, $\Sigma^{256}_1$, $\sigma^{256}_0$, $\sigma^{256}_1$.
+;;;; Each operates on the single 32-bit word x and produces a 32-bit word as output.
 ;;;;
 
 
 ;;;
-;;; sha256-bs0
+;;; sha256-bs0  (Big Sigma 0)
 ;;;
 
 (defun sha256-bs0 (x)
@@ -492,7 +491,7 @@
 
 
 ;;;
-;;; sha256-bs1
+;;; sha256-bs1  (Big Sigma 1)
 ;;;
 
 (defun sha256-bs1 (x)
@@ -500,7 +499,7 @@
 
 
 ;;;
-;;; sha256-ls0
+;;; sha256-ls0  (Little Sigma 0)
 ;;;
 
 (defun sha256-ls0 (x)
@@ -508,7 +507,7 @@
 
 
 ;;;
-;;; sha256-ls1
+;;; sha256-ls1  (Little Sigma 1)
 ;;;
 
 (defun sha256-ls1 (x)
@@ -525,17 +524,30 @@
 
 (defun sha256-calc (m)
 
-  ;; Make sure that the input m is valid.
-  (if (not (blistp m)) (error "m must be a list of bytes"))
-  (if (/= 64 (length m)) (error "list m must have exactly 64 bytes"))
+  ;; Make sure that m is a list of 64 bytes.
+  (if (not (and (blistp m) (= 64 (length m))))
+      (error "m must be a list of 64 bytes"))
 
   ;; Declare the local variables.
-  (let ((w) (a) (b) (c) (d) (e) (f) (g) (h) (x1) (x2))
+  (let ((a) (b) (c) (d) (e) (f) (g) (h)
+	(x1) (x2)
+	(w (make-array 64)))
 
-    ;; Simple vector array w contains sixty-four 32-bit integer registers.
-    (setf w (make-array 64))
+    ;; Prepare the message schedule.
+    (dotimes (i 16)
+      (setf (svref w i) (+ (ash (pop m) 24)
+			   (ash (pop m) 16)
+			   (ash (pop m) 8)
+			   (pop m))))
+    (do ((i 16 (1+ i))) ((> i 63))
+	(setf (svref w i)
+	      (logand (+ (sha256-ls1 (svref w (- i 2)))
+		      (svref w (- i 7))
+		      (sha256-ls0 (svref w (- i 15)))
+		      (svref w (- i 16)))
+		      #xFFFFFFFF)))
 
-    ;; Initialize the eight working variables with the old hash value.
+    ;; Initialize the eight working variables.
     (setf a (svref *sha256-h* 0))
     (setf b (svref *sha256-h* 1))
     (setf c (svref *sha256-h* 2))
@@ -544,22 +556,6 @@
     (setf f (svref *sha256-h* 5))
     (setf g (svref *sha256-h* 6))
     (setf h (svref *sha256-h* 7))
-
-    ;; Parse m into the first sixteen w registers.
-    (dotimes (i 16)
-      (setf (svref w i) (+ (ash (pop m) 24)
-			   (ash (pop m) 16)
-			   (ash (pop m) 8)
-			   (pop m))))
-
-    ;; Prepare the message schedule.
-    (do ((i 16 (1+ i))) ((> i 63))
-	(setf (svref w i)
-	      (logand (+ (sha256-ls1 (svref w (- i 2)))
-		      (svref w (- i 7))
-		      (sha256-ls0 (svref w (- i 15)))
-		      (svref w (- i 16)))
-		      #xFFFFFFFF)))
 
     ;; For t = 0 to 63:
     (dotimes (i 64) 
@@ -581,7 +577,7 @@
       (setf b a)
       (setf a (logand (+ x1 x2) #xFFFFFFFF)))
 
-    ;; Compute the intermediate hash value.
+    ;; Compute the ith intermediate hash value.
     (setf (svref *sha256-h* 0) (logand (+ a (svref *sha256-h* 0)) #xFFFFFFFF))
     (setf (svref *sha256-h* 1) (logand (+ b (svref *sha256-h* 1)) #xFFFFFFFF))
     (setf (svref *sha256-h* 2) (logand (+ c (svref *sha256-h* 2)) #xFFFFFFFF))
@@ -723,6 +719,247 @@
      (svref *sha256-h* 7)))
 
 
+
+;;;
+;;; FAST FAST FAST FAST FAST FAST FAST FAST 
+;;; FAST FAST FAST FAST FAST FAST FAST FAST 
+;;; FAST FAST FAST FAST FAST FAST FAST FAST 
+;;; FAST FAST FAST FAST FAST FAST FAST FAST 
+;;; FAST FAST FAST FAST FAST FAST FAST FAST 
+;;;
+;;; Fast SHA-256 implemented with sha256.dylib.
+;;; old structures: *sha256-n* *sha256-q* *sha256-r*
+;;; new structures: *sha256-fast-H* *sha256-fast-W*
+;;; old functions: sha256-qlen sha256-bs0 sha256-bs1 sha256-ls0 sha256-ls1
+;;; new functions: sha256-fast-calc sha256-fast-proc sha256-fast-reset
+;;;                sha256-fast-bits sha256-fast-bytes sha256-fast-hash
+;;;
+;;; To open sha256.dylib:
+;;; ? (open-shared-library "../SHA/sha256.dylib")
+;;; To check that the sha256_calc function is there:
+;;; ? (external "_sha256_calc")
+;;;
+
+
+;;;
+;;; *sha256-fast-H*
+;;; This 8 by 32-bit word block is specified in section 5.3.2.
+;;; It is declared in sha.lisp by sha256-fast-malloc.
+;;; A pointer to this block is passed to the C function sha256_calc.
+;;;
+
+(defparameter *sha256-fast-H* nil)
+(defparameter *sha256-fast-H-ptr* nil)
+
+;;;
+;;; *sha256-fast-W*
+;;; This 64-word message schedule is specified in section 6.2.
+;;; It is declared in sha.lisp by sha256-fast-malloc.
+;;; A pointer to this block is passed to the C function sha256_calc.
+;;;
+
+(defparameter *sha256-fast-W* nil)
+(defparameter *sha256-fast-W-ptr* nil)
+
+
+;;;
+;;; sha256-fast-reset
+;;;
+
+(defun sha256-fast-reset ()
+
+  ;; Open the shared library.
+  (open-shared-library "../SHA/sha256.dylib")
+
+  ;; Reserve memory from the heap.
+  (multiple-value-bind (hd hp)
+    (make-heap-ivector 8 '(unsigned-byte 32))
+    (setq *sha256-fast-H* hd)
+    (setq *sha256-fast-H-ptr* hp))
+  (multiple-value-bind (wd wp)
+    (make-heap-ivector 64 '(unsigned-byte 32))
+    (setq *sha256-fast-W* wd)
+    (setq *sha256-fast-W-ptr* wp))
+
+  ;; Initialize the hash value.
+  (setf (aref *sha256-fast-H* 0) #x6A09E667)
+  (setf (aref *sha256-fast-H* 1) #xBB67AE85)
+  (setf (aref *sha256-fast-H* 2) #x3C6EF372)
+  (setf (aref *sha256-fast-H* 3) #xA54FF53A)
+  (setf (aref *sha256-fast-H* 4) #x510E527F)
+  (setf (aref *sha256-fast-H* 5) #x9B05688C)
+  (setf (aref *sha256-fast-H* 6) #x1F83D9AB)
+  (setf (aref *sha256-fast-H* 7) #x5BE0CD19)
+
+  ;; Initialize the message schedule.
+  (dotimes (i 64)
+    (setf (aref *sha256-fast-W* i) 0))
+
+  ;; Set up the queue.
+  (setf *sha256-q* nil)
+  (setf *sha256-r* "")
+  (setf *sha256-n* 0))
+
+
+;;;
+;;; sha256-fast-calc
+;;; This function is the core of our fast SHA-256 implementation.
+;;; It is called by sha256-fast-proc.
+;;; It takes a list of 64 bytes and copies them into *sha256-fast-W*,
+;;; then calls the C function "sha256_calc" via sha256.dylib.
+;;;
+
+(defun sha256-fast-calc (m)
+
+  ;; Make sure that m is a list of 64 bytes.
+  (if (not (and (blistp m) (= 64 (length m))))
+      (error "m must be a list of 64 bytes"))
+
+
+  ;; Declare local variables.
+  (let ((err))
+
+    ;; Copy 64 bytes in m into 16 words in *sha256-W*.
+    (dotimes (i 16)
+      (setf (aref *sha256-fast-W* i) (+ (ash (pop m) 24)
+					(ash (pop m) 16)
+					(ash (pop m) 8)
+					(pop m))))
+
+      ;; Invoke sha256_calc.
+      (setf err (external-call "_sha256_calc"
+			       :address *sha256-fast-H-ptr*
+			       :address *sha256-fast-W-ptr*
+			       :unsigned-int))
+
+      ;; Check for errors.
+      (if (not (= 0 err))
+	  (error "sha256_calc returned ~A" err))
+
+      nil))
+
+
+;;;
+;;; sha256-fast-proc
+;;; Called by sha256-fast-bits, sha256-fast-bytes, and sha256-fast-hash.
+;;; Provides control over the sha256-fast-calc function.
+;;; Returns nil in all cases.
+;;;
+
+(defun sha256-fast-proc ()
+
+  ;; Return if the queue has less than 512 bits.
+  (if (< (sha256-qlen) 512) (return-from sha256-fast-proc nil))
+
+  ;; Move all excess bits in *sha256-r* to *sha256-q*.
+  (while (> (length *sha256-r*) 7)
+    (setf *sha256-q* (append *sha256-q* (list (bin-int (subseq *sha256-r* 0 8)))))
+    (setf *sha256-r* (subseq *sha256-r* 8 (length *sha256-r*))))
+
+  ;; Process each 512-bit message block in *sha256-q*.
+  (while (> (sha256-qlen) 511)
+    (let ((b nil))
+      (dotimes (i 64) (push (pop *sha256-q*) b))
+      (sha256-fast-calc (reverse b))))
+
+  nil)
+
+
+;;;
+;;; sha256-fast-bits
+;;; appends bits onto the end of the queue.
+;;; The input x is a binary string (ASCII 1's and 0's).
+;;; Calls sha256-fast-proc to process any message blocks.
+;;; Returns the number of message bits processed so far.
+;;;
+
+(defun sha256-fast-bits (x)
+
+  ;; Make sure that x is a binary string.
+  (if (not (bin-stringp x)) (error "x must be a binary string"))
+
+  ;; Tack x onto the end of *sha256-r*.
+  (setf *sha256-r* (format nil "~A~A" *sha256-r* x))
+
+  ;; Process the bits in the queue.
+  (sha256-fast-proc)
+
+  ;; Update the total number of message bits.
+  (incf *sha256-n* (length x)))
+
+
+;;;
+;;; sha256-fast-bytes
+;;; appends bytes onto the end of the queue.
+;;; The input b is a list of bytes.
+;;; Calls sha256-fast-proc to process any message blocks.
+;;; Returns the number of message bits processed so far.
+;;;
+
+(defun sha256-fast-bytes (b)
+
+  ;; Make sure that b is a list of bytes.
+  (if (not (blistp b)) (error "b must be a list of bytes"))
+
+  ;; Tack b onto the end of *sha256-q*.
+  (setf *sha256-q* (append *sha256-q* b))
+
+  ;; Process the bits in the queue.
+  (sha256-fast-proc)
+
+  ;; Update the total number of message bits.
+  (incf *sha256-n* (* 8 (length b))))
+
+
+;;;
+;;; sha256-fast-hash
+;;; returns the final hash value.  It takes no arguments.
+;;; Instead, it inserts the correct number of padding bits
+;;; and the 64-bit total number of message bits, calls sha256-fast-proc,
+;;; and finally prints the hash value.
+;;; See FIPS PUB 180-2 section 5.1.1.
+;;;
+
+(defun sha256-fast-hash ()
+
+  ;; Make sure that the queue is ready.
+  (if (> (sha256-qlen) 511) (error "sha1 queue has too many elements"))
+
+  ;; Declare local variables.
+  (let ((n) (k) (f) (x) (h))
+
+    ;; Append k+1 padding bits to the end of *sha256-r*.
+    (setf n (sha256-qlen))
+    (setf k (if (< n 448) (- 447 n) (- 959 n)))
+    (setf f (format nil "~A~A,'0B" "1~" k)) ; f is a format string
+    (setf x (format nil f 0))
+    (setf *sha256-r* (format nil "~A~A" *sha256-r* x))
+
+    ;; Append the 64-bit count to the end of *sha256-r*.
+    (setf *sha256-r* (format nil "~A~64,'0B" *sha256-r* *sha256-n*))
+
+    ;; Process the bits in the queue.
+    (sha256-fast-proc)
+
+    ;; Calculate the final hash value.
+    (setf h (+ (* (aref *sha256-fast-H* 0) (expt 2 (* 32 7)))
+	       (* (aref *sha256-fast-H* 1) (expt 2 (* 32 6)))
+	       (* (aref *sha256-fast-H* 2) (expt 2 (* 32 5)))
+	       (* (aref *sha256-fast-H* 3) (expt 2 (* 32 4)))
+	       (* (aref *sha256-fast-H* 4) (expt 2 (* 32 3)))
+	       (* (aref *sha256-fast-H* 5) (expt 2 (* 32 2)))
+	       (* (aref *sha256-fast-H* 6) (expt 2 (* 32 1)))
+	       (aref *sha256-fast-H* 7)))
+
+    ;; Free the memory from the heap.
+    (dispose-heap-ivector *sha256-fast-H*)
+    (dispose-heap-ivector *sha256-fast-W*)
+
+    ;; Return the final hash value.
+    h))
+
+
+
 ;;;;
 ;;;; SYSTEM LEVEL FUNCTIONS
 ;;;;
@@ -837,7 +1074,6 @@
   ;; FIPS 180-2 B.1 test with bytes
   (sha256-reset)
   (sha256-bytes (split-str "abc"))
-  ; (format nil "~64,'0X" (sha256-hash))
   (if (/= (sha256-hash)
 	  #xBA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD)
       (return-from sha-okayp nil))
@@ -855,6 +1091,36 @@
   (sha256-bytes (split-str "abcdbcdecdefdefgefghfghighij"))
   (sha256-bytes (split-str "hijkijkljklmklmnlmnomnopnopq"))
   (if (/= (sha256-hash)
+	  #x248D6A61D20638B8E5C026930C3E6039A33CE45964FF2167F6ECEDD419DB06C1)
+      (return-from sha-okayp nil))
+
+  ;; FIPS 180-2 B.1 test with bits
+  (sha256-fast-reset)
+  (sha256-fast-bits (text-bin "abc"))
+  (if (/= (sha256-fast-hash)
+	  #xBA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD)
+      (return-from sha-okayp nil))
+
+  ;; FIPS 180-2 B.1 test with bytes
+  (sha256-fast-reset)
+  (sha256-fast-bytes (split-str "abc"))
+  (if (/= (sha256-fast-hash)
+	  #xBA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD)
+      (return-from sha-okayp nil))
+
+  ;; FIPS 180-2 B.2 test with bits
+  (sha256-fast-reset)
+  (sha256-fast-bits (text-bin "abcdbcdecdefdefgefghfghighij"))
+  (sha256-fast-bits (text-bin "hijkijkljklmklmnlmnomnopnopq"))
+  (if (/= (sha256-fast-hash)
+	  #x248D6A61D20638B8E5C026930C3E6039A33CE45964FF2167F6ECEDD419DB06C1)
+      (return-from sha-okayp nil))
+
+  ;; FIPS 180-2 B.2 test with bytes
+  (sha256-fast-reset)
+  (sha256-fast-bytes (split-str "abcdbcdecdefdefgefghfghighij"))
+  (sha256-fast-bytes (split-str "hijkijkljklmklmnlmnomnopnopq"))
+  (if (/= (sha256-fast-hash)
 	  #x248D6A61D20638B8E5C026930C3E6039A33CE45964FF2167F6ECEDD419DB06C1)
       (return-from sha-okayp nil))
 

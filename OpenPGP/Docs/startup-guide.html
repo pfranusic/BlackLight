@@ -29,33 +29,39 @@ $ /Applications/OpenMCL/dppccl
 ? 
 </pre></blockquote>
 
-The next step is to load a "bootstrap" module, which loads everything else.
-The name of the bootstrap module is system-boot.
-It is first compiled, then loaded, and then run.
-It compiles and loads all the other modules.
-A few modules take a while to compile, e.g. prime.
-When system-boot finishes, it prints DONE.
+The next step is to load a bootstrap program.
+Compile the system file and then load it.
 <blockquote><pre>
-? (compile-file "system-boot")
-? (load "system-boot")
-? (system-boot)
+? (compile-file "system")
+? (load "system")
+</pre></blockquote>
+
+If the system has not already been built, then run system-make.
+When system-make finishes, it prints DONE.
+<blockquote><pre>
+? (system-make)
+</pre></blockquote>
+
+If the system has already been built, we can simply load it.
+When system-load finishes, it prints DONE.
+<blockquote><pre>
+? (system-load)
 </pre></blockquote>
 
 Now we test each module.
 This gives us a certain amount of assurance that each module is okay.
 A few modules take a while to complete their test, e.g. keys and comm.
 When a module passes its test, an "okay" is printed.
+When system-test finishes, it prints DONE.
 <blockquote><pre>
 ? (system-test)
 </pre></blockquote>
 
-After system-test, the keyring is always empty.
-So we <i><u>always</u></i> need to load the keyring with some keys.
-Since we're going to do the exercises below,
-we'll load some prefabricated keys from the Test directory.
-All we need to specify here is the path.
+If you need to modify one or more source files, you must recompile them.
+This is accomplished by simply running system-make, which will compile
+each .lisp file that is newer than its respective .dfsl file.
 <blockquote><pre>
-? (load-keyring "../Test")
+? (system-make)
 </pre></blockquote>
 
 
@@ -76,24 +82,22 @@ We assume that Zane has successfully booted his system,
 has successfully run system-test, and has the "<tt>?</tt>" prompt
 in the first terminal window.
 Zane assembles a short message into the transmit form tx-form, 
-encodes it with encode-comm, and writes the result into the file zzzz.pgp.
+encodes it with comm-encode, and writes the result into the file zzzz.pgp.
 <blockquote><pre>
 ? (setf tx-mssg "Please send me RFC 1991.")
-? (setf tx-form (list 'COMM 
-    (date) "Zeta" "Zane" "..." (split-str tx-mssg)))
-? (setf tx-code (encode-comm tx-form))
+? (setf tx-form (list 'COMM (date) "Zeta" "Zane" "..." (split-str tx-mssg)))
+? (setf tx-code (comm-encode tx-form))
 ? (putfile "../Test/zzzz.pgp" tx-code)
 </pre></blockquote>
 
-
 Zeta now receives the text message sent by Zane.
 To simplify this demonstration, Zeta uses the same terminal window as Zane.
-She gets the encoded data from zzzz.pgp, decodes it with decode-comm,
+She gets the encoded data from zzzz.pgp, decodes it with comm-decode,
 reads the message, and finally deletes the file zzzz.pgp
 so it doesn't clutter up the Test directory.
 <blockquote><pre>
 ? (setf rx-code (getfile "../Test/zzzz.pgp"))
-? (setf rx-form (decode-comm rx-code))
+? (setf rx-form (comm-decode rx-code))
 ? (setf rx-mssg (unite-str (nth 5 rx-form)))
 ? (delete-file "../Test/zzzz.pgp")
 </pre></blockquote>
@@ -102,16 +106,17 @@ Next, Zeta transmits a file to Zane.
 She specifies the name of the transmit file and the path.
 She then reads the file data and creates a communique form.
 Finally she encodes the communique and writes the file to zzzz.pgp.
+The lists tx-data, tx-form, and tx-code are very long.
+Zeta therefore employs the length operator to print the length of each list
+instead of the contents of each list.
 <blockquote><pre>
 ? (setf tx-file "rfc1991.txt")
 ? (setf tx-path (format nil "../Docs/~A" tx-file))
 ? (length (setf tx-data (getfile tx-path)))
-? (length (setf tx-form (list 'COMM 
-    (date) "Zeta" "Zane" tx-file tx-data)))
-? (length (setf tx-code (encode-comm tx-form)))
+? (length (setf tx-form (list 'COMM (date) "Zeta" "Zane" tx-file tx-data)))
+? (length (setf tx-code (comm-encode tx-form)))
 ? (putfile "../Test/zzzz.pgp" tx-code)
 </pre></blockquote>
-
 
 Zane receives the file sent by Zeta.
 He reads the zzzz.pgp file and decodes the communique.
@@ -119,7 +124,7 @@ Then he takes the decoded data and writes it to a file in Test.
 Finally he deletes zzzz.pgp.
 <blockquote><pre>
 ? (length (setf rx-code (getfile "../Test/zzzz.pgp")))
-? (length (setf rx-form (decode-comm rx-code)))
+? (length (setf rx-form (comm-decode rx-code)))
 ? (length (setf rx-data (nth 5 rx-form)))
 ? (setf rx-file (nth 4 rx-form))
 ? (setf rx-path (format nil "../Test/~A" rx-file))
@@ -156,9 +161,8 @@ into the file zzzz.pgp.
 ? (setf tx-file "rfc1991.txt")
 ? (setf tx-path (format nil "../Docs/~A" tx-file))
 ? (length (setf tx-data (getfile tx-path)))
-? (length (setf tx-form (list 'COMM 
-    (date) "Blake" "Genny" tx-file tx-data)))
-? (length (setf tx-code (encode-comm tx-form)))
+? (length (setf tx-form (list 'COMM (date) "Blake" "Genny" tx-file tx-data)))
+? (length (setf tx-code (comm-encode tx-form)))
 ? (putfile "../Test/zzzz.pgp" tx-code)
 </pre></blockquote>
 
@@ -172,8 +176,7 @@ Finally, she deletes rfc1991.txt and zzzz.pgp.
 $ cd ~/BlackLight/OpenPGP/Test/
 $ gpg -o rfc1991.txt --options gpg.conf -d zzzz.pgp
 $ diff rfc1991.txt ../Docs/rfc1991.txt
-$ rm rfc1991.txt
-$ rm zzzz.pgp
+$ rm rfc1991.txt zzzz.pgp
 </pre></blockquote>
 
 Now it's Genny's turn to transmit a large file to Blake.
@@ -189,7 +192,7 @@ He gets the file data from zzzz.pgp and decodes it into a communique form.
 Then he writes the decoded data into the rfc2440.txt file in the Test directory.
 <blockquote><pre>
 ? (length (setf rx-code (getfile "../Test/zzzz.pgp")))
-? (length (setf rx-form (decode-comm rx-code)))
+? (length (setf rx-form (comm-decode rx-code)))
 ? (length (setf rx-data (nth 5 rx-form)))
 ? (setf rx-file (nth 4 rx-form))
 ? (setf rx-path (format nil "../Test/~A" rx-file))
@@ -203,8 +206,7 @@ Finally, he deletes rfc2440.txt and zzzz.pgp.
 <blockquote><pre>
 $ cd ~/BlackLight/OpenPGP/Test/
 $ diff rfc2440.txt ../Docs/rfc2440.txt
-$ rm rfc2440.txt
-$ rm zzzz.pgp
+$ rm rfc2440.txt zzzz.pgp
 </pre></blockquote>
 
 
@@ -219,7 +221,6 @@ and the approximate size of the keys (1023.95 bits).
 <blockquote><pre>
 ? (create-local-keyfile "../Test" "Tom" 1023.95)
 </pre></blockquote>
-
 
 Next, we'll export Tom's keys.
 We'll take the keyfile we just created (Tom.loc)
@@ -246,14 +247,21 @@ so they don't clutter up the Test directory.
 
 In normal practice, we would move the local keyfile (Tom.loc) 
 to a directory, say My-Keys, with all of our other keys.
-We would also need to add "Tom.loc" to a <tt>LOAD-THESE</tt> file in My-Keys.
-<tt>LOAD-THESE</tt> is a list of keyfiles and is read by the load-keyring function.
-(See the Test directory for an example of the <tt>LOAD-THESE</tt> file).
+We would also need to add "Tom.loc" to a <tt>LOAD-KEYS</tt> file in My-Keys.
+<tt>LOAD-KEYS</tt> is a list of keyfiles and is read by the load-keyring function.
+(See the Test directory for an example of the <tt>LOAD-KEYS</tt> file).
 And to use our keys, we would need to load them.
 <blockquote><pre>
-? (load-keyring "Keys")
+? (load-keyring "../My-Keys")
 </pre></blockquote>
 
+
+<h2> Exit </h2>
+
+To exit the CCL REPL, simply run quit.
+<blockquote><pre>
+? (quit)
+</pre></blockquote>
 
 
 <h2> Summary </h2>

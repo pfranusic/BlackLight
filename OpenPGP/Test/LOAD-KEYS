@@ -1,0 +1,5 @@
+;; Test/LOAD-KEYS
+;; These keys are loaded onto the BlackLight keyring by keys-okayp.
+
+("Zeta.loc" "Zeta.rem" "Zane.loc" "Zane.rem" "Blake.loc" "Blake.rem" "Genny.rem")
+

@@ -1,170 +1,189 @@
 ;;;; BlackLight/OpenPGP/cfb.lisp
 ;;;; Copyright 2012 Peter Franusic
 ;;;;
-;;;; aes-expand-128
-;;;; takes a 128-bit key integer k
-;;;; and returns a key-schedule vector w.
-;;;; The key-schedule consists of forty-four 32-bit words
-;;;; that are derived from the session key.
-;;;; ? (setf k (random (expt 2 128)))
-;;;; ? (setf w (aes-expand-128 k))
-;;;;
-;;;; aes-cipher-128
-;;;; returns ciphertext given key-schedule w and plaintext p.
-;;;; w is a vector of 44 32-bit integers.
-;;;; The plaintext p and ciphertext are each a 128-bit integer.
-;;;; ? (setf p (random (expt 2 128)))
-;;;; ? (setf c (aes-cipher-128 w p))
-;;;;
 
 
 ;;;
-;;; cfb-encode-128
-;;; Input is a 128-bit session key integer k
-;;; and a list of plaintext bytes p-list.
-;;; Output is a list of ciphertext bytes c-list.
-;;; Expands the session key k into a 44-word key schedule,
-;;; performs the AES-128 Cipher function in OpenPGP CFB Mode
-;;; on all bytes in p-list, and returns c-list.
-;;;
+;;; cfb-128-encode
+;;; Implements the CFB encode algorithm inferred from RFC-4880 section 13.9 for $BS=16$.
+;;; Utilizes the aes-128-cfbe wrapper function.
+;;; Input k is a 128-bit unsigned integer.
+;;; Input r is either a list of 16 random bytes, or is simply NIL.
+;;; Input p is a list of plaintext bytes.
+;;; Evaluates to c, a list of ciphertext bytes.
+;;; 
 
-(defun cfb-encode-128 (k p-list)
-  (let ((w) (f) (n) (r-list) (c-list))
-    
-    ;;; Step A:
-    ;;; Make sure the inputs are okay.
-    ;;; Create key schedule w from session key k.
-    ;;; Create r-list with 16 random byte values.
+(defun cfb-128-encode (k r p)
+  (let ((x nil) (c nil) (n))
+
+    ;;; Make sure session key k is really a 128-bit unsigned integer.
+    ;;; Then create key schedule w from k.
     (if (not (and (integerp k) (plusp k) (< (log k 2) 128)))
 	(error "k must be a positive integer less than 2^128"))
-    (if (not (blistp p-list))
-	(error "p-list must be a non-empty list of bytes"))
-    (setf w (aes-expand-128 k))
-    (setf r-list (random-bytes 16))
+    (aes-128-expand k)
 
-    ;;; Step B:
-    ;;; Compute the 128-bit integer $r_i$ from r-list.
-    ;;; Compute the 128-bit integer $c_{-2} = aes(0) + r_i$
-    ;;; Split $c_{-2}$ into 16 bytes and initialize c-list.
-    (setf f (logxor (aes-cipher-128 w 0)
-		    (unite-int r-list)))
-    (setf c-list (split-int 16 f))
+    ;;; Make sure random list r is really a list.
+    ;;; Then if r is nil, fill it with 16 random bytes.
+    (if (not (listp r))
+	(error "r must be a list"))
+    (if (null r) (setf r (random-bytes 16)))
 
-    ;;; Step C:
-    ;;; Compute the 16-bit integer $r_q$ from (subseq r-list 14 16).
-    ;;; Compute the 16-bit integer $c_q = msw(aes(c_{-2})) + r_q$.
-    ;;; Split $c_q$ into 2 bytes and append them to c-list.
-    (setf f (logxor (quo (aes-cipher-128 w f) (expt 2 112))
-		    (unite-int (subseq r-list 14 16))))
-    (setf c-list (append c-list (split-int 2 f)))
+    ;;; Make sure plaintext list p is really a list of bytes.
+    ;;; Then count the number of elements in p.
+    (if (not (blistp p))
+	(error "p must be a non-empty list of bytes"))
+    (setf n (length p))
 
-    ;;; Step D:
-    ;;; Construct the 128-bit integer $c_{-1}$ from (subseq c 2 18).
-    (setf f (unite-int (subseq c-list 2 18)))
+    ;;; Compute the first 16 bytes of ciphertext list c.
+    ;;; $x = R \oplus \kappa(0)$.
+    (aes-128-inite (zeros 16))
+    (setf x (aes-128-cfbe r))
+    (setf c x)
 
-    ;;; Step E:
-    ;;; While there are at least 16 bytes in p-list:
-    ;;; Compute the 128-bit integer $p_i$ from the next 16 bytes in p-list.
-    ;;; Compute the 128-bit integer $c_i = aes(c_{i-1}) + p_i$
-    ;;; Split $c_i$ into 16 bytes and append them to c-list.
-    ;;; Remove 16 bytes from p-list.
-    (while (>= (length p-list) 16)
-      (setf f (logxor (aes-cipher-128 w f)
-		      (unite-int (subseq p-list 0 16))))
-      (setf c-list (append c-list (split-int 16 f)))
-      (dotimes (i 16) (pop p-list)))
+    ;;; Compute the next 2 bytes of c.
+    ;;; $x = \msw(\kappa(x)) \oplus \lsw(R)$.
+    ;;; Resynch the feedback with $c_2 c_3 \ldots c_18$.
+    (setf x (split-int 2
+	      (logxor (unite-int (subseq (aes-128-cipher x) 0 2))
+		      (unite-int (subseq r 14 16)))))
+    (setf c (append c x))
+    (aes-128-inite (subseq c 2 18))
+    (setf c (reverse c))
 
-    ;;; Step F:
-    ;;; If p-list is not empty:
-    ;;; Let n be the number of remaining bytes in p-list.
-    ;;; Compute the 128-bit integer $p_i$ from the remaining n bytes,
-    ;;; trailed by (- 16 n) dummy bytes in the least-significant bits.
-    ;;; Compute the 128-bit integer $c_i = aes(c_{i-1}) + p_i$.
-    ;;; Split $c_i$ into 16 bytes and append the first n bytes to c-list.
-    ;;; Remove n bytes from p-list.
-    (while (> (setf n (length p-list)) 0)
-      (setf f (logxor (aes-cipher-128 w f)
-		      (unite-int (append p-list (listn (- 16 n) 0)))))
-      (setf c-list (append c-list (subseq (split-int 16 f) 0 n)))
-      (dotimes (i n) (pop p-list)))
+    ;;; While there are at least 16 bytes in plaintext list p,
+    ;;; compute the next 16 bytes of ciphertext list p.
+    ;;; $C_i = P_i \oplus \kappa(C_{i-1})$.
+    (while (>= n 16)
+      (setf x (aes-128-cfbe (subseq p 0 16)))
+      (dotimes (i 16) (push (pop x) c))
+      (dotimes (i 16) (pop p))
+      (setf n (- n 16)))
 
-    ;;; Step G:
-    ;;; Return c-list.
-    c-list))
+    ;;; If p is empty then return.
+    ;;; Compute the last n bytes of c from the last n bytes in p.
+    ;;; Use $16-n$ dummy bytes in the least-significant bits.
+    ;;; $C_i = P_i \oplus \kappa(c_{i-1})$.
+    ;;; Return c.
+    (if (= 0 n) (return-from cfb-128-encode (reverse c)))
+    (setf x (subseq (aes-128-cfbe (append p (zeros (- 16 n)))) 0 n))
+    (dotimes (i n) (push (pop x) c))
+    (dotimes (i n) (pop p))
+    (reverse c)))
 
 
 ;;;
-;;; cfb-decode-128
-;;; Input is a 128-bit session key integer k 
-;;; and a list of ciphertext bytes c-list.
-;;; Output is a list of plaintext bytes p-list.
-;;; Expands the session key k into a 44-word key schedule,
-;;; performs the AES-128 Cipher function in OpenPGP CFB Mode
-;;; on all bytes in c-list, and returns p-list.
+;;; cfb-128-encode-test
+;;; 
+
+(defun cfb-128-encode-test ()
+  (let ((v) (k) (r) (x) (y) (z))
+    (setf v (getlist "../Test/cfb-test.data"))
+    (dotimes (i (length v))
+      (setf k (nth 0 (nth i v)))
+      (setf r (nth 1 (nth i v)))
+      (setf x (nth 2 (nth i v)))
+      (setf y (nth 3 (nth i v)))
+      (setf z (cfb-128-encode k r x))
+      (if (not (equal y z))
+	  (error "FAILED on k=~A" k)))
+    'PASSED))
+
+
+;;;
+;;; cfb-128-decode
+;;; Implements the CFB decode algorithm inferred from RFC-4880 section 13.9 for $BS=16$.
+;;; Utilizes the aes-128-cfbd wrapper function.
+;;; Input k is a 128-bit unsigned integer.
+;;; Input c is a list of ciphertext bytes.
+;;; Evaluates to p, a list of plaintext bytes.
 ;;;
 
-(defun cfb-decode-128 (k c-list)
-  (let ((w) (f) (n) (c_i) (p_i) (p-list))
+(defun cfb-128-decode (k c)
+  (let ((x nil) (p nil) (n) (r))
 
-    ;;; Step A:
-    ;;; Make sure the inputs are okay.
-    ;;; Create key schedule w from session key k.
+    ;;; Make sure session key k is really a 128-bit unsigned integer.
+    ;;; Then create key schedule w from k.
     (if (not (and (integerp k) (plusp k) (< (log k 2) 128)))
 	(error "k must be a positive integer less than 2^128"))
-    (if (not (and (blistp c-list) (>= (length c-list) 18)))
-	(error "c-list must be a list of bytes with at least 18 elements"))
-    (setf w (aes-expand-128 k))
+    (aes-128-expand k)
 
-    ;;; Step D:
-    ;;; Compute the 128-bit integer $c_{-1}$ from (subseq c 2 18).
-    ;;; Remove 18 bytes from c-list.
-    (setf c_i (unite-int (subseq c-list 2 18)))
-    (dotimes (i 18) (pop c-list))
+    ;;; Make sure ciphertext list c is really a list of at least 18 bytes.
+    ;;; Then count the number of elements in c.
+    (if (not (and (blistp c) (>= (length c) 18)))
+	(error "c must be a list of bytes with at least 18 elements"))
+    (setf n (length c))
 
-    ;;; Step E:
-    ;;; While there are at least 16 bytes in c-list:
-    ;;; Compute the 128-bit integer $c_i$ from the next 16 bytes in c-list.
-    ;;; Compute the 128-bit integer $p_i = aes(c_{i-1}) + c_i$.
-    ;;; Split $p_i$ into 16 bytes and append them to p-list.
-    ;;; Remove 16 bytes from c-list.
-    (while (>= (length c-list) 16)
-      (setf f c_i) ; Set feedback register to previous $c_i$.
-      (setf c_i (unite-int (subseq c-list 0 16)))
-      (setf p_i (logxor (aes-cipher-128 w f) c_i))
-      (setf p-list (append p-list (split-int 16 p_i)))
-      (dotimes (i 16) (pop c-list)))
+    ;;; $C_x$ is the first 16 bytes of ciphertext list c.
+    ;;; Compute random $R = C_x \oplus \kappa(0)$.
+    (setf x (subseq c 0 16))
+    (aes-128-initd (zeros 16))
+    (setf r (aes-128-cfbd x))
 
-    ;;; Step F:
-    ;;; While c-list is not empty:
-    ;;; Let n be the number of remaining bytes in c-list.
-    ;;; Compute the 128-bit integer $c_i$ from the remaining n bytes,
-    ;;; trailed by (- 16 n) dummy bytes in the least-significant bits.
-    ;;; Compute the 128-bit integer $p_i = aes(c_{i-1}) + c_i$.
-    ;;; Split $p_i$ into 16 bytes and append the first n bytes to p-list.
-    ;;; Remove n bytes from c-list.
-    (while (> (setf n (length c-list)) 0)
-      (setf f c_i)
-      (setf c_i (unite-int (append (subseq c-list 0 n) (listn (- 16 n) 0))))
-      (setf p_i (logxor (aes-cipher-128 w f) c_i))
-      (setf p-list (append p-list (subseq (split-int 16 p_i) 0 n)))
-      (dotimes (i 16) (pop c-list)))
+    ;;; Verify that the two-byte random words match.  I.e.,
+    ;;; $\msw(\kappa(C_x)) \oplus \lsw(R) = 256 \cdot c_{17} + c_{18}$.
+    ;;; Resynch the feedback with $c_2 c_3 \ldots c_18$.
+    (if (/= (logxor (unite-int (subseq (aes-128-cipher x) 0 2))
+		    (unite-int (subseq r 14 16)))
+	    (unite-int (subseq c 16 18)))
+	(return-from cfb-128-decode NIL))
+    (aes-128-initd (subseq c 2 18))
+    (dotimes (i 18) (pop c))
+    (setf n (- n 18))
 
-    ;;; Step G:
-    ;;; Return p-list.
-    p-list))
+    ;;; While there are at least 16 bytes in ciphertext list c,
+    ;;; compute the next 16 bytes of plaintext list p.
+    ;;; $P_i = C_i \oplus \kappa(C_{i-1})$.
+    (while (>= n 16)
+      (setf x (aes-128-cfbd (subseq c 0 16)))
+      (dotimes (i 16) (push (pop x) p))
+      (dotimes (i 16) (pop c))
+      (setf n (- n 16)))
+
+    ;;; If c is empty then return.
+    ;;; Compute the last n bytes of p from the last n bytes in c.
+    ;;; Use $16-n$ dummy bytes in the least-significant bits.
+    ;;; $P_i = C_i \oplus \kappa(C_{i-1})$.
+    ;;; Return p.
+    (if (= 0 n) (return-from cfb-128-decode (reverse p)))
+    (setf x (subseq (aes-128-cfbd (append c (zeros (- 16 n)))) 0 n))
+    (dotimes (i n) (push (pop x) p))
+    (dotimes (i n) (pop c))
+    (reverse p)))
+      
+
+;;;
+;;; cfb-128-decode-test
+;;; 
+
+(defun cfb-128-decode-test ()
+  (let ((v) (k) (x) (y) (z))
+    (setf v (getlist "../Test/cfb-test.data"))
+    (dotimes (i (length v))
+      (setf k (nth 0 (nth i v)))
+      (setf x (nth 2 (nth i v)))
+      (setf y (nth 3 (nth i v)))
+      (setf z (cfb-128-decode k y))
+      (if (not (equal x z))
+	  (error "FAILED on k=~A" k)))
+    'PASSED))
 
 
 ;;;
 ;;; cfb-okayp
-;;; tests the aes-128-cfb function.
+;;; Tests the cfb-128-encode and cfb-128-decode functions.
+;;; Randomly generates a plaintext list x, 
+;;; calls cfb-128-encode to produce a ciphertext list y,
+;;; calls cfb-128-decode to produce a plaintext list z,
+;;; then compares x and z.
+;;; Evaluates to either T or NIL.
 ;;;
 
 (defun cfb-okayp ()
-  (let ((k) (x) (y) (z))
+  (let ((k) (r) (x) (y) (z))
     (setf k (random (expt 2 128)))
-    (setf x (random-bytes (+ 100 (random 16))))
-    (setf y (cfb-encode-128 k x))
-    (setf z (cfb-decode-128 k y))
+    (setf r (random-bytes 16))
+    (setf x (random-bytes (+ 10000 (random 100))))
+    (setf y (cfb-128-encode k r x))
+    (setf z (cfb-128-decode k y))
     (equal x z)))
-
 
